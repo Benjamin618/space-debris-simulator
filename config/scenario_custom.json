@@ -1,0 +1,92 @@
+{
+  "window": {
+    "width": 1360,
+    "height": 820,
+    "fps": 30,
+    "title": "Space Debris Sandbox - Milestone 1 (custom scenario)"
+  },
+  "world": {
+    "width": 1920.0,
+    "height": 1280.0,
+    "boundary_mode": "wrap",
+    "grid_spacing": 100.0,
+    "star_count": 0,
+    "seed": 10
+  },
+  "ui": {
+    "show_grid": true,
+    "show_labels": true,
+    "show_vectors": true,
+    "show_trails": true,
+    "side_panel_width": 420
+  },
+  "class_styles": {
+    "ego": {
+      "label": "Ego Satellite",
+      "color": [86, 214, 255]
+    },
+    "dangerous_debris": {
+      "label": "Dangerous Debris",
+      "color": [255, 107, 107]
+    },
+    "collectable_debris": {
+      "label": "Collectable Debris",
+      "color": [255, 214, 102]
+    },
+    "neutral_object": {
+      "label": "Neutral Object",
+      "color": [134, 239, 172]
+    }
+  },
+  "ego": {
+    "name": "SAT-001",
+    "object_class": "ego",
+    "radius": 18.0,
+    "position": [800.0, 450.0],
+    "velocity": [0.0, 0.0]
+  },
+  "objects": [
+    {
+      "name": "DEB-A",
+      "object_class": "dangerous_debris",
+      "radius": 10.0,
+      "position": [250.0, 160.0],
+      "velocity": [42.0, 18.0]
+    },
+    {
+      "name": "DEB-B",
+      "object_class": "dangerous_debris",
+      "radius": 12.0,
+      "position": [1380.0, 700.0],
+      "velocity": [-58.0, -24.0]
+    },
+    {
+      "name": "COL-A",
+      "object_class": "collectable_debris",
+      "radius": 9.0,
+      "position": [1180.0, 260.0],
+      "velocity": [-36.0, 27.0]
+    },
+    {
+      "name": "COL-B",
+      "object_class": "collectable_debris",
+      "radius": 8.0,
+      "position": [320.0, 760.0],
+      "velocity": [28.0, -42.0]
+    },
+    {
+      "name": "NEU-A",
+      "object_class": "neutral_object",
+      "radius": 11.0,
+      "position": [1030.0, 120.0],
+      "velocity": [14.0, 38.0]
+    },
+    {
+      "name": "NEU-B",
+      "object_class": "neutral_object",
+      "radius": 13.0,
+      "position": [610.0, 640.0],
+      "velocity": [22.0, -16.0]
+    }
+  ]
+}
