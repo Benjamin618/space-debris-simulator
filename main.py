@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import pygame
 
 
 async def async_main() -> int:
