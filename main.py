@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import asyncio
 
-from src.sim.scenario import build_world
-from src.utils.config import load_scenario_config
-from src.viz.renderer import SimulationApp
-
 
 async def async_main() -> int:
     import sys
     from pathlib import Path
+    from src.sim.scenario import build_world
+    from src.utils.config import load_scenario_config
+    from src.viz.renderer import SimulationApp
 
     if sys.platform == "emscripten":
         config_path = Path("config/scenario_default.json")
