@@ -3,13 +3,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 from pathlib import Path
+import sys
 
 from src.sim.scenario import build_world
 from src.utils.config import load_scenario_config
 from src.viz.renderer import SimulationApp
 
 
-def parse_args() -> argparse.Namespace:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the space debris sandbox visual simulation.",
     )
@@ -25,11 +26,20 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional frame budget, useful for quick checks in headless mode.",
     )
-    return parser.parse_args()
+    return parser
+
+
+def resolve_runtime_args() -> argparse.Namespace:
+    if sys.platform == "emscripten":
+        return argparse.Namespace(
+            config=Path("config/scenario_default.json"),
+            max_frames=None,
+        )
+    return _build_parser().parse_args()
 
 
 async def async_main() -> int:
-    args = parse_args()
+    args = resolve_runtime_args()
     scenario_config = load_scenario_config(args.config)
     world = build_world(scenario_config)
     app = SimulationApp(config=scenario_config, world=world)
