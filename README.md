@@ -32,6 +32,31 @@ $env:SDL_VIDEODRIVER='dummy'
 venv\Scripts\python.exe main.py --max-frames 5
 ```
 
+## Web Build
+
+The desktop version stays the reference build on `main`, while the web work happens on `feat/web-v1`.
+
+Install the web packaging tool in the virtual environment:
+
+```powershell
+venv\Scripts\pip.exe install -r requirements-web.txt
+```
+
+Build a browser version with `pygbag`:
+
+```powershell
+venv\Scripts\python.exe -m pygbag --build .
+```
+
+This produces a static web build in the local `build` folder that can be deployed to a static host such as Netlify, GitHub Pages, or Cloudflare Pages.
+
+Notes for web compatibility:
+
+- keep the entry point as `main.py` at the repository root
+- keep the main loop async-aware
+- prefer static assets and repo-local files over platform-specific I/O
+- pay attention to filename case sensitivity when deploying
+
 ## Controls
 
 - `Space`: pause / resume

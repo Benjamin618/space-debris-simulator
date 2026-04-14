@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import math
 import random
@@ -43,7 +44,7 @@ class SimulationApp:
         self.small_font: pygame.font.Font | None = None
         self.star_field: list[tuple[int, int, int]] = []
 
-    def run(self, max_frames: int | None = None) -> int:
+    async def run(self, max_frames: int | None = None) -> int:
         pygame.init()
         pygame.display.set_caption(self.config.window.title)
 
@@ -71,6 +72,9 @@ class SimulationApp:
             frame_count += 1
             if max_frames is not None and frame_count >= max_frames:
                 break
+
+            # Browser builds need to yield back to the event loop every frame.
+            await asyncio.sleep(0)
 
         pygame.quit()
         return 0

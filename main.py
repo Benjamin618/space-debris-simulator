@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from pathlib import Path
 
 from src.sim.scenario import build_world
@@ -27,13 +28,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
+async def async_main() -> int:
     args = parse_args()
     scenario_config = load_scenario_config(args.config)
     world = build_world(scenario_config)
     app = SimulationApp(config=scenario_config, world=world)
-    return app.run(max_frames=args.max_frames)
+    return await app.run(max_frames=args.max_frames)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(asyncio.run(async_main()))
