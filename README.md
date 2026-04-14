@@ -1,6 +1,11 @@
 # Space Debris Sandbox
 
-Milestone 1 delivers a clean 2D real-time simulation for a computer vision portfolio project inspired by satellite perception and space debris monitoring.
+Portfolio project for satellite perception: a modular 2D simulation for debris dynamics, tracking, and autonomous decision-making.
+
+The repository currently includes:
+
+- a desktop Milestone 1 simulation in Python with `pygame`
+- a web V1 in plain `canvas` and JavaScript for lightweight deployment
 
 ## Features
 
@@ -10,8 +15,10 @@ Milestone 1 delivers a clean 2D real-time simulation for a computer vision portf
 - Simple kinematics with wrap-around world boundaries
 - Scenario configuration loaded from a JSON file
 - Visual UI with legend, object list, frame rate, and controls
+- Canvas web demo with matching scene logic and keyboard controls
+- Web metrics for battery, mission score, collected debris, and avoided threats
 
-## Run
+## Desktop Run
 
 Use the workspace virtual environment:
 
@@ -32,30 +39,20 @@ $env:SDL_VIDEODRIVER='dummy'
 venv\Scripts\python.exe main.py --max-frames 5
 ```
 
-## Web Build
+## Web Run
 
-The desktop version stays the reference build on `main`, while the web work happens on `feat/web-v1`.
+The web app is a static site inside `web/`.
 
-Install the web packaging tool in the virtual environment:
-
-```powershell
-venv\Scripts\pip.exe install -r requirements-web.txt
-```
-
-Build a browser version with `pygbag`:
+Start a local static server from that folder:
 
 ```powershell
-venv\Scripts\python.exe -m pygbag --build .
+cd web
+python -m http.server 8080
 ```
 
-This produces a static web build in the local `build` folder that can be deployed to a static host such as Netlify, GitHub Pages, or Cloudflare Pages.
+Then open `http://localhost:8080`.
 
-Notes for web compatibility:
-
-- keep the entry point as `main.py` at the repository root
-- keep the main loop async-aware
-- prefer static assets and repo-local files over platform-specific I/O
-- pay attention to filename case sensitivity when deploying
+For deployment, publish the contents of `web/` on GitHub Pages, Netlify, or Cloudflare Pages.
 
 ## Controls
 
@@ -65,6 +62,25 @@ Notes for web compatibility:
 - `V`: toggle velocity vectors
 - `T`: toggle trails
 - `Esc`: quit
+
+Web:
+
+- mission duration capped at `3 minutes`
+- `Mode`: `Player` by default, switchable to `Greedy`
+- `Arrows`: issue one pilot action at a time inside the centered control frame in `Player` mode
+- same direction repeatedly: speed levels `20 -> 40 -> 80 px/s`
+- opposite arrow to current motion: stop ego
+- one piloting action is allowed every `1.0 s`
+- `Greedy`: avoid nearby `dangerous_debris`, otherwise move toward the closest `collectable_debris`
+- battery consumption exists even at rest, with an extra cost proportional to the square of ego speed
+- mission score combines collected targets, avoided threats, missed-threat penalties, and a sobriety bonus
+- a mission summary overlay appears at the end with score, duration, energy use, and restart action
+- `Space`: pause / resume
+- `G`: toggle grid
+- `L`: toggle labels
+- `V`: toggle velocity vectors
+- `T`: toggle trails
+- `R`: restart mission
 
 ## Scenario file
 
@@ -90,3 +106,5 @@ Each object uses:
   "velocity": [42.0, 18.0]
 }
 ```
+
+The web demo ships with self-contained copies in `web/config/`.

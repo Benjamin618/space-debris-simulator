@@ -1,0 +1,153 @@
+{
+  "window": {
+    "width": 1360,
+    "height": 820,
+    "fps": 60,
+    "title": "Space Debris Sandbox - Web V1"
+  },
+  "world": {
+    "width": 1600.0,
+    "height": 900.0,
+    "boundary_mode": "wrap",
+    "grid_spacing": 100.0,
+    "star_count": 140,
+    "seed": 7
+  },
+  "ui": {
+    "show_grid": true,
+    "show_labels": true,
+    "show_vectors": true,
+    "show_trails": true,
+    "side_panel_width": 320
+  },
+  "ego_control": {
+    "speed_levels": [20.0, 40.0, 80.0],
+    "frame_ratio": 0.8,
+    "show_frame": true,
+    "action_interval_ms": 1000,
+    "battery_capacity": 100.0,
+    "battery_drain_scale": 0.0002,
+    "collect_radius_padding": 12.0,
+    "collision_padding": 8.0,
+    "threat_radius": 180.0,
+    "threat_clear_radius": 240.0
+  },
+  "mission": {
+    "duration_limit_s": 180.0,
+    "collected_points": 12,
+    "avoided_points": 4,
+    "missed_penalty": 18,
+    "sobriety_bonus_max": 20
+  },
+  "class_styles": {
+    "ego": {
+      "label": "Ego Satellite",
+      "color": [86, 214, 255]
+    },
+    "dangerous_debris": {
+      "label": "Dangerous Debris",
+      "color": [255, 107, 107]
+    },
+    "collectable_debris": {
+      "label": "Collectable Debris",
+      "color": [255, 214, 102]
+    },
+    "neutral_object": {
+      "label": "Neutral Object",
+      "color": [134, 239, 172]
+    }
+  },
+  "ego": {
+    "name": "SAT-001",
+    "object_class": "ego",
+    "radius": 18.0,
+    "position": [800.0, 450.0],
+    "velocity": [0.0, 0.0]
+  },
+  "objects": [
+    {
+      "name": "DEB-A",
+      "object_class": "dangerous_debris",
+      "radius": 10.0,
+      "position": [250.0, 160.0],
+      "velocity": [42.0, 18.0]
+    },
+    {
+      "name": "DEB-B",
+      "object_class": "dangerous_debris",
+      "radius": 12.0,
+      "position": [1380.0, 700.0],
+      "velocity": [-58.0, -24.0]
+    },
+    {
+      "name": "COL-A",
+      "object_class": "collectable_debris",
+      "radius": 9.0,
+      "position": [1180.0, 260.0],
+      "velocity": [-36.0, 27.0]
+    },
+    {
+      "name": "COL-B",
+      "object_class": "collectable_debris",
+      "radius": 8.0,
+      "position": [320.0, 760.0],
+      "velocity": [28.0, -42.0]
+    },
+    {
+      "name": "NEU-A",
+      "object_class": "neutral_object",
+      "radius": 11.0,
+      "position": [1030.0, 120.0],
+      "velocity": [14.0, 38.0]
+    },
+    {
+      "name": "NEU-B",
+      "object_class": "neutral_object",
+      "radius": 13.0,
+      "position": [610.0, 640.0],
+      "velocity": [22.0, -16.0]
+    },
+    {
+      "name": "DEB-C",
+      "object_class": "dangerous_debris",
+      "radius": 11.0,
+      "position": [980.0, 760.0],
+      "velocity": [-34.0, -12.0]
+    },
+    {
+      "name": "DEB-D",
+      "object_class": "dangerous_debris",
+      "radius": 9.0,
+      "position": [1420.0, 330.0],
+      "velocity": [-22.0, 40.0]
+    },
+    {
+      "name": "COL-C",
+      "object_class": "collectable_debris",
+      "radius": 8.0,
+      "position": [760.0, 220.0],
+      "velocity": [18.0, 34.0]
+    },
+    {
+      "name": "COL-D",
+      "object_class": "collectable_debris",
+      "radius": 10.0,
+      "position": [520.0, 450.0],
+      "velocity": [26.0, -18.0]
+    },
+    {
+      "name": "NEU-C",
+      "object_class": "neutral_object",
+      "radius": 12.0,
+      "position": [1320.0, 540.0],
+      "velocity": [-16.0, 22.0]
+    },
+    {
+      "name": "NEU-D",
+      "object_class": "neutral_object",
+      "radius": 10.0,
+      "position": [280.0, 420.0],
+      "velocity": [30.0, 12.0]
+    }
+  ]
+}

@@ -1,2 +1,0 @@
--r requirements.txt
-pygbag>=0.9,<1.0

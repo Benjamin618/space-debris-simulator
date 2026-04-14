@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Debris Simulator - Web V1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <main class="viewport-panel">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Canvas Web V1</p>
+          <h1>Space Debris Simulator</h1>
+        </div>
+        <div class="toolbar">
+          <label class="field">
+            <span>Mode</span>
+            <select id="mode-select">
+              <option value="player">Player</option>
+              <option value="greedy">Greedy</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Scenario</span>
+            <select id="scenario-select">
+              <option value="default">Default</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <button id="pause-button" class="button button-primary" type="button">Pause</button>
+          <button id="reset-button" class="button" type="button">Restart Mission</button>
+        </div>
+      </header>
+
+      <section class="canvas-card">
+        <canvas id="sim-canvas" width="1280" height="720"></canvas>
+        <div class="canvas-overlay">
+          <div class="badge-row">
+            <span class="badge" id="status-badge">Running</span>
+            <span class="badge badge-muted">Canvas</span>
+          </div>
+          <p class="canvas-caption">3-minute mission. Player mode uses 1 s action steps and 3 speed levels. Space, G, L, V, T, R</p>
+        </div>
+        <div id="mission-summary" class="mission-summary" hidden>
+          <div class="mission-summary-card">
+            <p class="eyebrow mission-summary-eyebrow">Mission Summary</p>
+            <h2 id="mission-summary-title">Mission Complete</h2>
+            <p id="mission-summary-reason" class="mission-summary-reason">Objectives completed</p>
+            <dl class="mission-summary-grid">
+              <div>
+                <dt>Score</dt>
+                <dd id="mission-summary-score">0</dd>
+              </div>
+              <div>
+                <dt>Duration</dt>
+                <dd id="mission-summary-duration">0.0 s</dd>
+              </div>
+              <div>
+                <dt>Energy Used</dt>
+                <dd id="mission-summary-energy">0.0%</dd>
+              </div>
+              <div>
+                <dt>Sobriety</dt>
+                <dd id="mission-summary-sobriety">+0</dd>
+              </div>
+              <div>
+                <dt>Collected</dt>
+                <dd id="mission-summary-collected">0</dd>
+              </div>
+              <div>
+                <dt>Avoided</dt>
+                <dd id="mission-summary-avoided">0</dd>
+              </div>
+              <div>
+                <dt>Missed</dt>
+                <dd id="mission-summary-missed">0</dd>
+              </div>
+            </dl>
+            <div class="mission-summary-actions">
+              <button id="mission-restart-button" class="button button-primary" type="button">Restart Mission</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="sidebar">
+      <section class="panel">
+        <h2>Mission Console</h2>
+        <dl class="stats-grid">
+          <div>
+            <dt>Status</dt>
+            <dd id="stat-status">Running</dd>
+          </div>
+          <div>
+            <dt>Sim Time</dt>
+            <dd id="stat-time">0.0 s</dd>
+          </div>
+          <div>
+            <dt>Frame Rate</dt>
+            <dd id="stat-fps">0 FPS</dd>
+          </div>
+          <div>
+            <dt>Objects</dt>
+            <dd id="stat-objects">0</dd>
+          </div>
+          <div>
+            <dt>World Size</dt>
+            <dd id="stat-world-size">0 x 0</dd>
+          </div>
+          <div>
+            <dt>Scenario</dt>
+            <dd id="stat-scenario">Default</dd>
+          </div>
+          <div>
+            <dt>Mode</dt>
+            <dd id="stat-mode">Player</dd>
+          </div>
+          <div>
+            <dt>Command</dt>
+            <dd id="stat-command">Ready</dd>
+          </div>
+          <div>
+            <dt>Ego State</dt>
+            <dd id="stat-ego-state">Stopped</dd>
+          </div>
+          <div>
+            <dt>Ego Speed</dt>
+            <dd id="stat-ego-speed">0 px/s</dd>
+          </div>
+          <div>
+            <dt>Battery</dt>
+            <dd id="stat-battery">100.0%</dd>
+          </div>
+          <div>
+            <dt>Energy Used</dt>
+            <dd id="stat-energy-used">0.0%</dd>
+          </div>
+          <div>
+            <dt>Collected</dt>
+            <dd id="stat-collected">0</dd>
+          </div>
+          <div>
+            <dt>Avoided</dt>
+            <dd id="stat-avoided">0</dd>
+          </div>
+          <div>
+            <dt>Missed</dt>
+            <dd id="stat-missed">0</dd>
+          </div>
+          <div>
+            <dt>Sobriety</dt>
+            <dd id="stat-sobriety">0</dd>
+          </div>
+          <div>
+            <dt>Score</dt>
+            <dd id="stat-score">0</dd>
+          </div>
+        </dl>
+      </section>
+
+      <details class="panel accordion" open>
+        <summary>Legend</summary>
+        <div id="legend-list" class="legend-list"></div>
+      </details>
+
+      <details class="panel accordion">
+        <summary>Entities</summary>
+        <div id="entity-list" class="entity-list"></div>
+      </details>
+
+      <details class="panel accordion">
+        <summary>Controls</summary>
+        <ul class="control-list">
+          <li><kbd>Mode</kbd> Start in Player, switch to Greedy anytime</li>
+          <li><kbd>Arrows</kbd> One press = 20 px/s, twice = 40, three times = 80</li>
+          <li>Opposite direction stops the ego on the next allowed command</li>
+          <li>One piloting action is allowed every 1 second</li>
+          <li>Greedy avoids nearby dangerous debris, then chases the closest collectable</li>
+          <li>Battery drain exists even at rest, with an extra cost that scales with speed squared</li>
+          <li>Mission score = collected points - missed threats + sobriety bonus</li>
+          <li><kbd>Space</kbd> Pause / resume</li>
+          <li><kbd>G</kbd> Toggle grid</li>
+          <li><kbd>L</kbd> Toggle labels</li>
+          <li><kbd>V</kbd> Toggle vectors</li>
+          <li><kbd>T</kbd> Toggle trails</li>
+          <li><kbd>R</kbd> Restart mission</li>
+        </ul>
+      </details>
+    </aside>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
