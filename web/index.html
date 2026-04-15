@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Space Debris Simulator - Web V1</title>
+  <title>Space Debris Simulator - Web V2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
@@ -14,7 +14,7 @@
     <main class="viewport-panel">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Canvas Web V1</p>
+          <p class="eyebrow">Canvas Web V2</p>
           <h1>Space Debris Simulator</h1>
         </div>
         <div class="toolbar">
@@ -37,55 +37,68 @@
         </div>
       </header>
 
-      <section class="canvas-card">
-        <canvas id="sim-canvas" width="1280" height="720"></canvas>
-        <div class="canvas-overlay">
-          <div class="badge-row">
-            <span class="badge" id="status-badge">Running</span>
-            <span class="badge badge-muted">Canvas</span>
+      <section class="viewport-grid">
+        <article class="canvas-card">
+          <canvas id="sim-canvas" width="1280" height="720"></canvas>
+          <div class="canvas-overlay">
+            <div class="badge-row">
+              <span class="badge" id="status-badge">Running</span>
+              <span class="badge badge-muted">Truth View</span>
+            </div>
+            <p class="canvas-caption">World truth visualization. Colors are analyst-facing only, not sensor inputs.</p>
           </div>
-          <p class="canvas-caption">3-minute mission. Player mode uses 1 s action steps and 3 speed levels. Space, G, L, V, T, R</p>
-        </div>
-        <div id="mission-summary" class="mission-summary" hidden>
-          <div class="mission-summary-card">
-            <p class="eyebrow mission-summary-eyebrow">Mission Summary</p>
-            <h2 id="mission-summary-title">Mission Complete</h2>
-            <p id="mission-summary-reason" class="mission-summary-reason">Objectives completed</p>
-            <dl class="mission-summary-grid">
-              <div>
-                <dt>Score</dt>
-                <dd id="mission-summary-score">0</dd>
+          <div id="mission-summary" class="mission-summary" hidden>
+            <div class="mission-summary-card">
+              <p class="eyebrow mission-summary-eyebrow">Mission Summary</p>
+              <h2 id="mission-summary-title">Mission Complete</h2>
+              <p id="mission-summary-reason" class="mission-summary-reason">Objectives completed</p>
+              <dl class="mission-summary-grid">
+                <div>
+                  <dt>Score</dt>
+                  <dd id="mission-summary-score">0</dd>
+                </div>
+                <div>
+                  <dt>Duration</dt>
+                  <dd id="mission-summary-duration">0.0 s</dd>
+                </div>
+                <div>
+                  <dt>Energy Used</dt>
+                  <dd id="mission-summary-energy">0.0%</dd>
+                </div>
+                <div>
+                  <dt>Sobriety</dt>
+                  <dd id="mission-summary-sobriety">+0</dd>
+                </div>
+                <div>
+                  <dt>Collected</dt>
+                  <dd id="mission-summary-collected">0</dd>
+                </div>
+                <div>
+                  <dt>Avoided</dt>
+                  <dd id="mission-summary-avoided">0</dd>
+                </div>
+                <div>
+                  <dt>Missed</dt>
+                  <dd id="mission-summary-missed">0</dd>
+                </div>
+              </dl>
+              <div class="mission-summary-actions">
+                <button id="mission-restart-button" class="button button-primary" type="button">Restart Mission</button>
               </div>
-              <div>
-                <dt>Duration</dt>
-                <dd id="mission-summary-duration">0.0 s</dd>
-              </div>
-              <div>
-                <dt>Energy Used</dt>
-                <dd id="mission-summary-energy">0.0%</dd>
-              </div>
-              <div>
-                <dt>Sobriety</dt>
-                <dd id="mission-summary-sobriety">+0</dd>
-              </div>
-              <div>
-                <dt>Collected</dt>
-                <dd id="mission-summary-collected">0</dd>
-              </div>
-              <div>
-                <dt>Avoided</dt>
-                <dd id="mission-summary-avoided">0</dd>
-              </div>
-              <div>
-                <dt>Missed</dt>
-                <dd id="mission-summary-missed">0</dd>
-              </div>
-            </dl>
-            <div class="mission-summary-actions">
-              <button id="mission-restart-button" class="button button-primary" type="button">Restart Mission</button>
             </div>
           </div>
-        </div>
+        </article>
+
+        <article class="canvas-card radar-card">
+          <canvas id="radar-canvas" width="640" height="720"></canvas>
+          <div class="canvas-overlay">
+            <div class="badge-row">
+              <span class="badge badge-radar">Radar Tracking</span>
+              <span class="badge badge-muted" id="radar-quality-badge">Scan Active</span>
+            </div>
+            <p class="canvas-caption">Ego-centric sensing view. Last detection is frozen, while the dashed path and uncertainty zone show the current prediction.</p>
+          </div>
+        </article>
       </section>
     </main>
 
@@ -161,6 +174,14 @@
             <dt>Score</dt>
             <dd id="stat-score">0</dd>
           </div>
+          <div>
+            <dt>Radar Beam</dt>
+            <dd id="stat-radar-angle">0 deg</dd>
+          </div>
+          <div>
+            <dt>Detections</dt>
+            <dd id="stat-radar-detections">0</dd>
+          </div>
         </dl>
       </section>
 
@@ -174,6 +195,11 @@
         <div id="entity-list" class="entity-list"></div>
       </details>
 
+      <details class="panel accordion" open>
+        <summary>Tracks</summary>
+        <div id="track-list" class="entity-list"></div>
+      </details>
+
       <details class="panel accordion">
         <summary>Controls</summary>
         <ul class="control-list">
@@ -184,6 +210,8 @@
           <li>Greedy avoids nearby dangerous debris, then chases the closest collectable</li>
           <li>Battery drain exists even at rest, with an extra cost that scales with speed squared</li>
           <li>Mission score = collected points - missed threats + sobriety bonus</li>
+          <li>Radar view is ego-centric and displays noisy sensing plus estimated tracks</li>
+          <li>Classification is simulated from object size and observation quality, separate from tracking</li>
           <li><kbd>Space</kbd> Pause / resume</li>
           <li><kbd>G</kbd> Toggle grid</li>
           <li><kbd>L</kbd> Toggle labels</li>

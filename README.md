@@ -1,24 +1,95 @@
 # Space Debris Sandbox
 
-Portfolio project for satellite perception: a modular 2D simulation for debris dynamics, tracking, and autonomous decision-making.
+Portfolio project aimed at demonstrating relevant engineering instincts for an Astroscale AIV Engineer - Computer Vision & GNC role.
 
-The repository currently includes:
+The repository now contains:
 
-- a desktop Milestone 1 simulation in Python with `pygame`
-- a web V1 in plain `canvas` and JavaScript for lightweight deployment
+- a desktop `pygame` milestone that renders the truth scene
+- a web `canvas` V2 sandbox with a truth view and an ego-centric radar/tracking view
 
-## Features
+## Why This Project Exists
 
-- 2D animated scene with an ego satellite and multiple moving objects
-- Object classes with dedicated colors and labels
-- Real-time loop powered by `pygame`
-- Simple kinematics with wrap-around world boundaries
-- Scenario configuration loaded from a JSON file
-- Visual UI with legend, object list, frame rate, and controls
-- Canvas web demo with matching scene logic and keyboard controls
-- Web metrics for battery, mission score, collected debris, and avoided threats
+This is not intended to be just a visual animation.
 
-## Desktop Run
+The goal is to show a validation-oriented mindset through a small but structured simulation stack:
+
+- truth-world simulation
+- explicit sensing assumptions
+- noisy measurements
+- state estimation
+- classification uncertainty
+- reproducible scenario configuration
+
+That aligns more closely with AIV-style work than a purely omniscient demo.
+
+## Current Architecture
+
+### Desktop Python
+
+- [main.py](C:\Users\benja\DS_projects\space-debris-sandbox\main.py) loads a JSON scenario and launches the `pygame` renderer
+- [src/utils/config.py](C:\Users\benja\DS_projects\space-debris-sandbox\src\utils\config.py) parses desktop scenario files
+- [src/sim/](C:\Users\benja\DS_projects\space-debris-sandbox\src\sim) contains basic world and object propagation
+- [src/viz/renderer.py](C:\Users\benja\DS_projects\space-debris-sandbox\src\viz\renderer.py) renders the truth scene
+
+### Web V2
+
+- [web/index.html](C:\Users\benja\DS_projects\space-debris-sandbox\web\index.html) hosts the dual-panel interface
+- [web/app.js](C:\Users\benja\DS_projects\space-debris-sandbox\web\app.js) contains:
+  - truth-world motion and mission logic
+  - ego-centric radar sensing
+  - per-object Kalman tracking
+  - simulated classification based on object size and observation quality
+- [web/config/](C:\Users\benja\DS_projects\space-debris-sandbox\web\config) stores seeded scenarios and radar/classification parameters
+
+## Web V2 Overview
+
+The web sandbox separates five ideas that are often mixed together in small demos:
+
+1. `Truth`
+   Objects move in the world with known ground-truth state.
+2. `Radar sensing`
+   A rotating beam revisits targets and produces noisy `range` / `bearing` observations.
+3. `Tracking`
+   Each detected debris object owns a Kalman track with state `(x, vx, y, vy)` in an ego-relative frame.
+4. `Classification`
+   A separate vision-style estimator infers object category from physical size and observation quality.
+5. `Visualization`
+   The left panel shows truth; the right panel shows what the ego-centered sensing/tracking stack currently believes.
+
+## What V2 Demonstrates
+
+- `Computer vision validation mindset`
+  Classification confidence drops with distance rather than staying artificially certain.
+- `GNC validation mindset`
+  Relative state tracks persist between radar revisits and are updated only by measurements.
+- `Reproducibility`
+  Radar noise and scenario behavior are seeded through JSON config.
+- `Engineering quality`
+  Truth, sensing, estimation, and interpretation are kept conceptually separate.
+
+## Important Assumptions
+
+V2 is intentionally simplified and documents those simplifications honestly:
+
+- 2D sandbox, not orbital mechanics
+- constant-velocity debris motion in V2
+- ego truth state treated as perfectly known
+- one explicit sensor model: radar
+- classification is simulated, not learned with a CNN
+- colors are only for the analyst-facing truth display
+
+Those assumptions are deliberate so the project stays readable and portfolio-friendly while still demonstrating relevant engineering structure.
+
+## Releases
+
+- `v0.1.0-m1`
+  Desktop milestone 1 truth-scene animation
+- `v0.2.0-web-v1`
+  Initial web mission loop with player/greedy control, scoring, and mission management
+- `current working state`
+  Web V2 radar tracking sandbox
+
+## Run The Desktop App
 
 Use the workspace virtual environment:
 
@@ -39,11 +110,9 @@ $env:SDL_VIDEODRIVER='dummy'
 venv\Scripts\python.exe main.py --max-frames 5
 ```
 
-## Web Run
+## Run The Web App
 
-The web app is a static site inside `web/`.
-
-Start a local static server from that folder:
+Start a static server from [web](C:\Users\benja\DS_projects\space-debris-sandbox\web):
 
 ```powershell
 cd web
@@ -52,59 +121,48 @@ python -m http.server 8080
 
 Then open `http://localhost:8080`.
 
-For deployment, publish the contents of `web/` on GitHub Pages, Netlify, or Cloudflare Pages.
+## Web Controls
 
-## Controls
+- `Mode`
+  `Player` for discrete piloting, `Greedy` for the simple autonomy baseline
+- `Arrows`
+  Issue one player command at a time in `Player` mode
+- `Space`
+  Pause / resume
+- `G`
+  Toggle world grid
+- `L`
+  Toggle labels
+- `V`
+  Toggle velocity vectors
+- `T`
+  Toggle trails
+- `R`
+  Restart mission
 
-- `Space`: pause / resume
-- `G`: toggle grid
-- `L`: toggle labels
-- `V`: toggle velocity vectors
-- `T`: toggle trails
-- `Esc`: quit
+## Scenario Content
 
-Web:
+Web scenarios now contain:
 
-- mission duration capped at `3 minutes`
-- `Mode`: `Player` by default, switchable to `Greedy`
-- `Arrows`: issue one pilot action at a time inside the centered control frame in `Player` mode
-- same direction repeatedly: speed levels `20 -> 40 -> 80 px/s`
-- opposite arrow to current motion: stop ego
-- one piloting action is allowed every `1.0 s`
-- `Greedy`: avoid nearby `dangerous_debris`, otherwise move toward the closest `collectable_debris`
-- battery consumption exists even at rest, with an extra cost proportional to the square of ego speed
-- mission score combines collected targets, avoided threats, missed-threat penalties, and a sobriety bonus
-- a mission summary overlay appears at the end with score, duration, energy use, and restart action
-- `Space`: pause / resume
-- `G`: toggle grid
-- `L`: toggle labels
-- `V`: toggle velocity vectors
-- `T`: toggle trails
-- `R`: restart mission
+- world and UI parameters
+- ego control and mission scoring parameters
+- radar sensing parameters
+- tracking tuning parameters
+- classification confidence parameters
+- per-object truth metadata such as `true_category` and `physical_size`
 
-## Scenario file
+## Spec
 
-The default scenario lives in `config/scenario_default.json`.
+The V2 design intent is captured in:
 
-Main sections:
+- [specs/v2_radar_tracking_spec.md](C:\Users\benja\DS_projects\space-debris-sandbox\specs\v2_radar_tracking_spec.md)
 
-- `window`: window size, FPS, title
-- `world`: simulation dimensions, grid spacing, stars, random seed
-- `ui`: overlay toggles and side panel width
-- `class_styles`: labels and RGB colors per class
-- `ego`: ego satellite definition
-- `objects`: list of moving scene objects
+## Next Directions
 
-Each object uses:
+Likely post-V2 steps:
 
-```json
-{
-  "name": "DEB-A",
-  "object_class": "dangerous_debris",
-  "radius": 10.0,
-  "position": [250.0, 160.0],
-  "velocity": [42.0, 18.0]
-}
-```
-
-The web demo ships with self-contained copies in `web/config/`.
+- richer relative-motion models
+- second-order or maneuvering debris dynamics
+- explicit telemetry export
+- camera-style synthetic observations
+- more realistic track management and data association

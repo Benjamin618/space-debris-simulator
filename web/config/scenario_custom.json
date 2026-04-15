@@ -3,7 +3,7 @@
     "width": 1360,
     "height": 820,
     "fps": 30,
-    "title": "Space Debris Sandbox - Web V1 (custom scenario)"
+    "title": "Space Debris Sandbox - Web V2 (custom scenario)"
   },
   "world": {
     "width": 1920.0,
@@ -19,6 +19,26 @@
     "show_vectors": true,
     "show_trails": true,
     "side_panel_width": 420
+  },
+  "radar": {
+    "max_range": 410.0,
+    "scan_rate_deg_s": 36.0,
+    "beam_width_deg": 12.0,
+    "range_noise_std": 5.5,
+    "bearing_noise_std_deg": 1.9,
+    "seed": 84
+  },
+  "tracking": {
+    "process_variance": 10.0,
+    "measurement_variance": 22.0,
+    "initial_measurement_variance": 42.0
+  },
+  "classification": {
+    "full_quality_range": 150.0,
+    "degraded_quality_range": 390.0,
+    "min_confidence": 0.22,
+    "max_confidence": 0.94,
+    "ambiguity_noise_scale": 0.42
   },
   "ego_control": {
     "speed_levels": [20.0, 40.0, 80.0],
@@ -60,6 +80,8 @@
   "ego": {
     "name": "SAT-001",
     "object_class": "ego",
+    "true_category": "ego_vehicle",
+    "physical_size": 1.8,
     "radius": 18.0,
     "position": [800.0, 450.0],
     "velocity": [0.0, 0.0]
@@ -68,86 +90,110 @@
     {
       "name": "DEB-A",
       "object_class": "dangerous_debris",
-      "radius": 10.0,
+      "true_category": "hazard_debris",
+      "physical_size": 3.25,
+      "radius": 30.0,
       "position": [250.0, 160.0],
-      "velocity": [42.0, 18.0]
+      "velocity": [4.7, 2.0]
     },
     {
       "name": "DEB-B",
       "object_class": "dangerous_debris",
-      "radius": 12.0,
+      "true_category": "hazard_debris",
+      "physical_size": 3.0,
+      "radius": 36.0,
       "position": [1380.0, 700.0],
-      "velocity": [-58.0, -24.0]
+      "velocity": [-6.3, -2.7]
     },
     {
       "name": "COL-A",
       "object_class": "collectable_debris",
-      "radius": 9.0,
+      "true_category": "target_debris",
+      "physical_size": 1.5,
+      "radius": 13.5,
       "position": [1180.0, 260.0],
-      "velocity": [-36.0, 27.0]
+      "velocity": [-4.0, 3.0]
     },
     {
       "name": "COL-B",
       "object_class": "collectable_debris",
-      "radius": 8.0,
+      "true_category": "target_debris",
+      "physical_size": 1.43,
+      "radius": 12.0,
       "position": [320.0, 760.0],
-      "velocity": [28.0, -42.0]
+      "velocity": [3.0, -4.7]
     },
     {
       "name": "NEU-A",
       "object_class": "neutral_object",
-      "radius": 11.0,
+      "true_category": "neutral_debris",
+      "physical_size": 0.36,
+      "radius": 3.7,
       "position": [1030.0, 120.0],
-      "velocity": [14.0, 38.0]
+      "velocity": [1.7, 4.3]
     },
     {
       "name": "NEU-B",
       "object_class": "neutral_object",
-      "radius": 13.0,
+      "true_category": "neutral_debris",
+      "physical_size": 0.34,
+      "radius": 4.3,
       "position": [610.0, 640.0],
-      "velocity": [22.0, -16.0]
+      "velocity": [2.3, -1.7]
     },
     {
       "name": "DEB-C",
       "object_class": "dangerous_debris",
-      "radius": 11.0,
+      "true_category": "hazard_debris",
+      "physical_size": 3.1,
+      "radius": 33.0,
       "position": [980.0, 760.0],
-      "velocity": [-34.0, -12.0]
+      "velocity": [-3.7, -1.3]
     },
     {
       "name": "DEB-D",
       "object_class": "dangerous_debris",
-      "radius": 9.0,
+      "true_category": "hazard_debris",
+      "physical_size": 3.3,
+      "radius": 27.0,
       "position": [1420.0, 330.0],
-      "velocity": [-22.0, 40.0]
+      "velocity": [-2.3, 4.3]
     },
     {
       "name": "COL-C",
       "object_class": "collectable_debris",
-      "radius": 8.0,
+      "true_category": "target_debris",
+      "physical_size": 1.47,
+      "radius": 12.0,
       "position": [760.0, 220.0],
-      "velocity": [18.0, 34.0]
+      "velocity": [2.0, 3.7]
     },
     {
       "name": "COL-D",
       "object_class": "collectable_debris",
-      "radius": 10.0,
+      "true_category": "target_debris",
+      "physical_size": 1.4,
+      "radius": 15.0,
       "position": [520.0, 450.0],
-      "velocity": [26.0, -18.0]
+      "velocity": [3.0, -2.0]
     },
     {
       "name": "NEU-C",
       "object_class": "neutral_object",
-      "radius": 12.0,
+      "true_category": "neutral_debris",
+      "physical_size": 0.35,
+      "radius": 4.0,
       "position": [1320.0, 540.0],
-      "velocity": [-16.0, 22.0]
+      "velocity": [-1.7, 2.3]
     },
     {
       "name": "NEU-D",
       "object_class": "neutral_object",
-      "radius": 10.0,
+      "true_category": "neutral_debris",
+      "physical_size": 0.32,
+      "radius": 3.3,
       "position": [280.0, 420.0],
-      "velocity": [30.0, 12.0]
+      "velocity": [3.3, 1.3]
     }
   ]
 }
