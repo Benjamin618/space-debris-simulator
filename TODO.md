@@ -6,6 +6,7 @@
 - tune radar revisit rate, beam width, and noise
 - tune classification confidence so distance effects are intuitive
 - add lightweight regression checks where practical
+- expose the new Python V2 core more explicitly in the desktop path
 - align any remaining desktop/web wording with V2 terminology
 
 ## Post-V2 Candidates

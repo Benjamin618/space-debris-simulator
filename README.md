@@ -28,7 +28,11 @@ That aligns more closely with AIV-style work than a purely omniscient demo.
 
 - [main.py](C:\Users\benja\DS_projects\space-debris-sandbox\main.py) loads a JSON scenario and launches the `pygame` renderer
 - [src/utils/config.py](C:\Users\benja\DS_projects\space-debris-sandbox\src\utils\config.py) parses desktop scenario files
-- [src/sim/](C:\Users\benja\DS_projects\space-debris-sandbox\src\sim) contains basic world and object propagation
+- [src/sim/](C:\Users\benja\DS_projects\space-debris-sandbox\src\sim) now contains both the original world propagation and the V2 Python core modules:
+  - [src/sim/geometry.py](C:\Users\benja\DS_projects\space-debris-sandbox\src\sim\geometry.py)
+  - [src/sim/classification.py](C:\Users\benja\DS_projects\space-debris-sandbox\src\sim\classification.py)
+  - [src/sim/radar.py](C:\Users\benja\DS_projects\space-debris-sandbox\src\sim\radar.py)
+  - [src/sim/tracking.py](C:\Users\benja\DS_projects\space-debris-sandbox\src\sim\tracking.py)
 - [src/viz/renderer.py](C:\Users\benja\DS_projects\space-debris-sandbox\src\viz\renderer.py) renders the truth scene
 
 ### Web V2
@@ -55,6 +59,23 @@ The web sandbox separates five ideas that are often mixed together in small demo
    A separate vision-style estimator infers object category from physical size and observation quality.
 5. `Visualization`
    The left panel shows truth; the right panel shows what the ego-centered sensing/tracking stack currently believes.
+
+## Python V2 Core
+
+The same V2 concepts now exist in Python as readable engineering modules rather than only in JavaScript:
+
+- `geometry`
+  relative position and wrap-aware deltas
+- `classification`
+  simulated vision estimate from size and observation quality
+- `radar`
+  rotating beam, revisit logic, and noisy `range` / `bearing` detections
+- `tracking`
+  one Kalman track per detected object
+- `world`
+  the place where truth propagation, sensing, and track updates are orchestrated
+
+This is the main path intended for future engineering work, because it is easier to read, extend, test, and discuss in an interview.
 
 ## What V2 Demonstrates
 

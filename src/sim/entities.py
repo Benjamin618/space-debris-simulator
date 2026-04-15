@@ -23,12 +23,34 @@ class SpaceObject:
     vy: float
     is_ego: bool = False
     label: str | None = None
+    true_category: str | None = None
+    physical_size: float | None = None
     trail: deque[tuple[float, float]] = field(
         default_factory=lambda: deque(maxlen=90),
         repr=False,
     )
 
     def __post_init__(self) -> None:
+        if self.true_category is None:
+            if self.object_class == "dangerous_debris":
+                self.true_category = "hazard_debris"
+            elif self.object_class == "collectable_debris":
+                self.true_category = "target_debris"
+            elif self.object_class == "ego":
+                self.true_category = "ego_vehicle"
+            else:
+                self.true_category = "neutral_debris"
+
+        if self.physical_size is None:
+            if self.true_category == "hazard_debris":
+                self.physical_size = 3.0
+            elif self.true_category == "target_debris":
+                self.physical_size = 1.5
+            elif self.true_category == "ego_vehicle":
+                self.physical_size = 1.8
+            else:
+                self.physical_size = 0.35
+
         self.trail.append((self.x, self.y))
 
     @property

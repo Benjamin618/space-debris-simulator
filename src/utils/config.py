@@ -49,6 +49,34 @@ class ObjectConfig:
     radius: float
     position: Point2D
     velocity: Point2D
+    true_category: str | None = None
+    physical_size: float | None = None
+
+
+@dataclass(slots=True)
+class RadarConfig:
+    max_range: float
+    scan_rate_deg_s: float
+    beam_width_deg: float
+    range_noise_std: float
+    bearing_noise_std_deg: float
+    seed: int
+
+
+@dataclass(slots=True)
+class TrackingConfig:
+    process_variance: float
+    measurement_variance: float
+    initial_measurement_variance: float
+
+
+@dataclass(slots=True)
+class ClassificationConfig:
+    full_quality_range: float
+    degraded_quality_range: float
+    min_confidence: float
+    max_confidence: float
+    ambiguity_noise_scale: float
 
 
 @dataclass(slots=True)
@@ -59,6 +87,9 @@ class ScenarioConfig:
     class_styles: dict[str, ClassStyle]
     ego: ObjectConfig
     objects: list[ObjectConfig]
+    radar: RadarConfig
+    tracking: TrackingConfig
+    classification: ClassificationConfig
 
 
 def _as_color(values: list[int]) -> Color:
@@ -80,6 +111,8 @@ def _parse_object(raw: dict[str, object]) -> ObjectConfig:
         radius=float(raw["radius"]),
         position=_as_point(raw["position"]),
         velocity=_as_point(raw["velocity"]),
+        true_category=str(raw["true_category"]) if "true_category" in raw else None,
+        physical_size=float(raw["physical_size"]) if "physical_size" in raw else None,
     )
 
 
@@ -120,4 +153,30 @@ def load_scenario_config(path: str | Path) -> ScenarioConfig:
         class_styles=class_styles,
         ego=_parse_object(raw["ego"]),
         objects=[_parse_object(item) for item in raw["objects"]],
+        radar=RadarConfig(
+            max_range=float(raw.get("radar", {}).get("max_range", 360.0)),
+            scan_rate_deg_s=float(raw.get("radar", {}).get("scan_rate_deg_s", 40.8)),
+            beam_width_deg=float(raw.get("radar", {}).get("beam_width_deg", 14.0)),
+            range_noise_std=float(raw.get("radar", {}).get("range_noise_std", 4.0)),
+            bearing_noise_std_deg=float(raw.get("radar", {}).get("bearing_noise_std_deg", 1.6)),
+            seed=int(raw.get("radar", {}).get("seed", 42)),
+        ),
+        tracking=TrackingConfig(
+            process_variance=float(raw.get("tracking", {}).get("process_variance", 12.0)),
+            measurement_variance=float(raw.get("tracking", {}).get("measurement_variance", 18.0)),
+            initial_measurement_variance=float(
+                raw.get("tracking", {}).get("initial_measurement_variance", 36.0)
+            ),
+        ),
+        classification=ClassificationConfig(
+            full_quality_range=float(raw.get("classification", {}).get("full_quality_range", 140.0)),
+            degraded_quality_range=float(
+                raw.get("classification", {}).get("degraded_quality_range", 340.0)
+            ),
+            min_confidence=float(raw.get("classification", {}).get("min_confidence", 0.24)),
+            max_confidence=float(raw.get("classification", {}).get("max_confidence", 0.95)),
+            ambiguity_noise_scale=float(
+                raw.get("classification", {}).get("ambiguity_noise_scale", 0.38)
+            ),
+        ),
     )

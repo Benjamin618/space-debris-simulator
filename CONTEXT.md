@@ -34,6 +34,11 @@ The project now moves beyond omniscient animation by separating:
 - Kalman tracking
 - classification confidence
 
+This structure now exists in two forms:
+
+- a web demo for visual communication
+- a Python core for readable engineering logic
+
 This shift is important because the target role is closer to algorithm validation and test design than to visualization alone.
 
 ## Portfolio Positioning

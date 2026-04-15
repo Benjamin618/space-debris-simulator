@@ -33,6 +33,8 @@ The V2 radar tracking sandbox maps well to the target role because it shows:
 - `AIV / validation mindset`
   the scenario is configurable, seeded, and architected as a chain of truth -> sensing -> estimation -> interpretation
 
+The Python core strengthens that story further because the sensing, tracking, and classification logic is now visible in a backend-style engineering form rather than only in the browser demo.
+
 ## Honest Limits
 
 V2 does not claim:
