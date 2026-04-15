@@ -179,10 +179,17 @@ class KalmanAxis {
   predict(dt, processVariance) {
     this.position += this.velocity * dt;
 
-    const p00 = this.p00 + dt * (this.p10 + this.p01) + dt * dt * this.p11 + processVariance;
-    const p01 = this.p01 + dt * this.p11;
-    const p10 = this.p10 + dt * this.p11;
-    const p11 = this.p11 + processVariance;
+    // Constant-velocity model with white-acceleration process noise.
+    // This keeps covariance growth tied to the elapsed time instead of
+    // inflating too aggressively at every rendered frame.
+    const q00 = 0.25 * dt * dt * dt * dt * processVariance;
+    const q01 = 0.5 * dt * dt * dt * processVariance;
+    const q11 = dt * dt * processVariance;
+
+    const p00 = this.p00 + dt * (this.p10 + this.p01) + dt * dt * this.p11 + q00;
+    const p01 = this.p01 + dt * this.p11 + q01;
+    const p10 = this.p10 + dt * this.p11 + q01;
+    const p11 = this.p11 + q11;
 
     this.p00 = p00;
     this.p01 = p01;
@@ -1173,7 +1180,6 @@ class CanvasSimulationApp {
 
   drawTrack(track, radius) {
     const estimatedColor = categoryColor(track.estimatedCategory);
-    const velocityMagnitude = Math.hypot(track.vx, track.vy);
     const anchor = this.radarPoint(track.lastDetectionX, track.lastDetectionY, radius);
     const predictedState = track.currentEstimatePoint();
     const endpoint = this.radarPoint(predictedState.x, predictedState.y, radius);
@@ -1208,16 +1214,15 @@ class CanvasSimulationApp {
       this.radarCtx.fill();
     });
 
-    const sigmaMajorPx = clamp(
-      ((track.sigma * 0.32 + track.timeSinceUpdate * (2.2 + velocityMagnitude * 0.14)) / this.world.radar.config.maxRange) * radius,
-      8,
-      34,
-    );
-    const sigmaMinorPx = clamp(
-      ((track.sigma * 0.14 + track.timeSinceUpdate * 0.9) / this.world.radar.config.maxRange) * radius,
-      4,
-      14,
-    );
+    const heading = track.headingRad;
+    const cosHeading = Math.cos(heading);
+    const sinHeading = Math.sin(heading);
+    const varX = Math.max(track.axisX.p00, 1);
+    const varY = Math.max(track.axisY.p00, 1);
+    const alongTrackSigma = Math.sqrt(varX * cosHeading * cosHeading + varY * sinHeading * sinHeading);
+    const crossTrackSigma = Math.sqrt(varX * sinHeading * sinHeading + varY * cosHeading * cosHeading);
+    const sigmaMajorPx = clamp((3 * alongTrackSigma / this.world.radar.config.maxRange) * radius, 4, 50);
+    const sigmaMinorPx = clamp((3 * crossTrackSigma / this.world.radar.config.maxRange) * radius, 3, 28);
 
     this.radarCtx.save();
     this.radarCtx.strokeStyle = estimatedColor;
@@ -1231,12 +1236,12 @@ class CanvasSimulationApp {
 
     this.radarCtx.save();
     this.radarCtx.translate(endpoint.x, endpoint.y);
-    this.radarCtx.rotate(track.headingRad);
+    this.radarCtx.rotate(heading);
     this.radarCtx.fillStyle = COLORS.uncertainty;
     this.radarCtx.beginPath();
     this.radarCtx.ellipse(0, 0, sigmaMajorPx, sigmaMinorPx, 0, 0, Math.PI * 2);
     this.radarCtx.fill();
-    this.radarCtx.strokeStyle = "rgba(255, 255, 255, 0.24)";
+    this.radarCtx.strokeStyle = "rgba(255, 255, 255, 0.32)";
     this.radarCtx.lineWidth = 1.5;
     this.radarCtx.stroke();
     this.radarCtx.restore();
@@ -1247,10 +1252,16 @@ class CanvasSimulationApp {
     this.radarCtx.rect(anchor.x - 4, anchor.y - 4, 8, 8);
     this.radarCtx.stroke();
 
-    this.radarCtx.fillStyle = estimatedColor;
+    this.radarCtx.save();
+    this.radarCtx.strokeStyle = estimatedColor;
+    this.radarCtx.lineWidth = 1.6;
     this.radarCtx.beginPath();
-    this.radarCtx.arc(endpoint.x, endpoint.y, 6, 0, Math.PI * 2);
-    this.radarCtx.fill();
+    this.radarCtx.moveTo(endpoint.x - 5, endpoint.y);
+    this.radarCtx.lineTo(endpoint.x + 5, endpoint.y);
+    this.radarCtx.moveTo(endpoint.x, endpoint.y - 5);
+    this.radarCtx.lineTo(endpoint.x, endpoint.y + 5);
+    this.radarCtx.stroke();
+    this.radarCtx.restore();
 
     this.radarCtx.fillStyle = COLORS.textPrimary;
     this.radarCtx.font = '12px "IBM Plex Sans", sans-serif';

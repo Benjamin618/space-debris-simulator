@@ -29,7 +29,7 @@
     "seed": 84
   },
   "tracking": {
-    "process_variance": 10.0,
+    "process_variance": 14.0,
     "measurement_variance": 22.0,
     "initial_measurement_variance": 42.0
   },
