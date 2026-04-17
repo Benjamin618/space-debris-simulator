@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
+from src.eval.metrics import MetricsAccumulator
 from src.sim.radar import RadarDetection, RadarSensor
 from src.sim.entities import SpaceObject
 from src.sim.tracking import Track, TrackManager
+from src.utils.config import TruthDynamicsConfig
+
+if TYPE_CHECKING:
+    from src.eval.telemetry import TelemetryRecorder
 
 
 @dataclass(slots=True)
@@ -15,6 +21,9 @@ class SimulationWorld:
     objects: list[SpaceObject]
     radar_sensor: RadarSensor | None = None
     track_manager: TrackManager | None = None
+    truth_dynamics: TruthDynamicsConfig | None = None
+    metrics_accumulator: MetricsAccumulator = field(default_factory=MetricsAccumulator, repr=False)
+    telemetry_recorder: TelemetryRecorder | None = field(default=None, repr=False)
     sim_time: float = 0.0
     recent_detections: list[RadarDetection] = field(default_factory=list, repr=False)
 
@@ -42,6 +51,12 @@ class SimulationWorld:
                     classification=detection.classification,
                 )
 
+        self.metrics_accumulator.record_detections(self.recent_detections)
+        self.metrics_accumulator.record_world_state(self)
+
+        if self.telemetry_recorder is not None:
+            self.telemetry_recorder.record_step(self)
+
     def class_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
         for obj in self.all_objects:
@@ -53,3 +68,7 @@ class SimulationWorld:
         if self.track_manager is None:
             return []
         return self.track_manager.tracks
+
+    @property
+    def metrics_summary(self) -> dict[str, object]:
+        return self.metrics_accumulator.build_summary()

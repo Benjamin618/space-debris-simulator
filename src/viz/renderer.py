@@ -45,8 +45,9 @@ class DesktopLayout:
     truth_rect: pygame.Rect
     radar_truth_rect: pygame.Rect
     radar_rect: pygame.Rect
-    telemetry_rect: pygame.Rect
-    sidebar_rect: pygame.Rect
+    log_rect: pygame.Rect
+    metrics_rect: pygame.Rect
+    status_rect: pygame.Rect
 
 
 @dataclass(slots=True)
@@ -80,6 +81,7 @@ class SimulationApp:
         self.star_field: list[tuple[int, int, int]] = []
         self.detection_log: list[DetectionLogEntry] = []
         self.radar_truth_echoes: dict[str, RadarTruthEcho] = {}
+        self.selected_track_name: str | None = None
 
     def run(self, max_frames: int | None = None) -> int:
         pygame.init()
@@ -138,6 +140,10 @@ class SimulationApp:
                     self.config.ui.show_vectors = not self.config.ui.show_vectors
                 if event.key == pygame.K_t:
                     self.config.ui.show_trails = not self.config.ui.show_trails
+                if event.key in (pygame.K_TAB, pygame.K_RIGHT, pygame.K_DOWN):
+                    self._cycle_selected_track(1)
+                if event.key in (pygame.K_LEFT, pygame.K_UP):
+                    self._cycle_selected_track(-1)
         return True
 
     def _draw(self, surface: pygame.Surface) -> None:
@@ -160,36 +166,45 @@ class SimulationApp:
             show_legend=False,
         )
         self._draw_radar_panel(surface, layout.radar_rect)
-        self._draw_telemetry_panel(surface, layout.telemetry_rect)
-        self._draw_sidebar_panel(surface, layout.sidebar_rect)
+        self._draw_telemetry_panel(surface, layout.log_rect)
+        self._draw_live_metrics_panel(surface, layout.metrics_rect)
+        self._draw_status_panel(surface, layout.status_rect)
 
     def _compute_layout(self, window_width: int, window_height: int) -> DesktopLayout:
         gap = 14
         margin = 20
-        sidebar_width = max(220, min(260, int(window_width * 0.17)))
-        content_width = window_width - margin * 2 - sidebar_width - gap * 2
+        content_width = window_width - margin * 2 - gap * 2
         content_height = window_height - margin * 2 - gap
 
-        left_width = content_width // 2
-        right_width = content_width - left_width
+        column_width = content_width // 3
+        col_widths = [column_width, column_width, content_width - 2 * column_width]
 
         top_height = content_height // 2
         bottom_height = content_height - top_height
 
-        truth_rect = pygame.Rect(margin, margin, left_width, top_height)
-        radar_truth_rect = pygame.Rect(margin, truth_rect.bottom + gap, left_width, bottom_height)
-        radar_rect = pygame.Rect(truth_rect.right + gap, margin, right_width, top_height)
-        telemetry_rect = pygame.Rect(radar_rect.x, radar_rect.bottom + gap, right_width, bottom_height)
-        sidebar_rect = pygame.Rect(telemetry_rect.right + gap, margin, sidebar_width, content_height)
+        x0 = margin
+        x1 = x0 + col_widths[0] + gap
+        x2 = x1 + col_widths[1] + gap
+        y0 = margin
+        y1 = y0 + top_height + gap
+
+        truth_rect = pygame.Rect(x0, y0, col_widths[0], top_height)
+        radar_truth_rect = pygame.Rect(x1, y0, col_widths[1], top_height)
+        radar_rect = pygame.Rect(x2, y0, col_widths[2], top_height)
+        log_rect = pygame.Rect(x0, y1, col_widths[0], bottom_height)
+        metrics_rect = pygame.Rect(x1, y1, col_widths[1], bottom_height)
+        status_rect = pygame.Rect(x2, y1, col_widths[2], bottom_height)
         return DesktopLayout(
             truth_rect=truth_rect,
             radar_truth_rect=radar_truth_rect,
             radar_rect=radar_rect,
-            telemetry_rect=telemetry_rect,
-            sidebar_rect=sidebar_rect,
+            log_rect=log_rect,
+            metrics_rect=metrics_rect,
+            status_rect=status_rect,
         )
 
     def _ingest_radar_state(self, dt: float) -> None:
+        self._sync_selected_track()
         fade_rate = dt
         expired: list[str] = []
         for name, echo in self.radar_truth_echoes.items():
@@ -220,6 +235,34 @@ class SimulationApp:
                     ttl=5.0,
                     max_ttl=5.0,
                 )
+        self._sync_selected_track()
+
+    def _sync_selected_track(self) -> None:
+        track_names = [track.object_name for track in self.world.tracks]
+        if not track_names:
+            self.selected_track_name = None
+            return
+        if self.selected_track_name not in track_names:
+            self.selected_track_name = track_names[0]
+
+    def _cycle_selected_track(self, step: int) -> None:
+        track_names = [track.object_name for track in self.world.tracks]
+        if not track_names:
+            self.selected_track_name = None
+            return
+        if self.selected_track_name not in track_names:
+            self.selected_track_name = track_names[0]
+            return
+        index = track_names.index(self.selected_track_name)
+        self.selected_track_name = track_names[(index + step) % len(track_names)]
+
+    def _get_selected_track(self) -> object | None:
+        if self.selected_track_name is None:
+            return None
+        for track in self.world.tracks:
+            if track.object_name == self.selected_track_name:
+                return track
+        return None
 
     def _draw_world_panel(
         self,
@@ -613,8 +656,10 @@ class SimulationApp:
             center[1] + int(track.y * scale),
         )
         category_color = self._category_color(track.estimated_category)
-        pygame.draw.line(surface, category_color, (estimate_point[0] - 4, estimate_point[1]), (estimate_point[0] + 4, estimate_point[1]), width=2)
-        pygame.draw.line(surface, category_color, (estimate_point[0], estimate_point[1] - 4), (estimate_point[0], estimate_point[1] + 4), width=2)
+        cross_width = 3 if track.object_name == self.selected_track_name else 2
+        cross_span = 6 if track.object_name == self.selected_track_name else 4
+        pygame.draw.line(surface, category_color, (estimate_point[0] - cross_span, estimate_point[1]), (estimate_point[0] + cross_span, estimate_point[1]), width=cross_width)
+        pygame.draw.line(surface, category_color, (estimate_point[0], estimate_point[1] - cross_span), (estimate_point[0], estimate_point[1] + cross_span), width=cross_width)
 
         sigma_major_px = max(4, min(int((3 * math.sqrt(max(track.axis_x.p00, 1.0)) / self.world.radar_sensor.config.max_range) * radius), 50))
         sigma_minor_px = max(3, min(int((3 * math.sqrt(max(track.axis_y.p00, 1.0)) / self.world.radar_sensor.config.max_range) * radius), 28))
@@ -625,6 +670,8 @@ class SimulationApp:
             sigma_minor_px * 2,
         )
         pygame.draw.ellipse(surface, (200, 208, 220), ellipse_rect, width=1)
+        if track.object_name == self.selected_track_name:
+            pygame.draw.ellipse(surface, (255, 255, 255), ellipse_rect.inflate(6, 6), width=1)
 
     def _is_object_visible_to_radar(self, obj: SpaceObject) -> bool:
         if self.world.radar_sensor is None:
@@ -746,7 +793,66 @@ class SimulationApp:
                 surface.blit(meta, (log_rect.x + 12, y))
                 y += 18
 
-    def _draw_sidebar_panel(self, surface: pygame.Surface, rect: pygame.Rect) -> None:
+    def _draw_live_metrics_panel(self, surface: pygame.Surface, rect: pygame.Rect) -> None:
+        assert self.title_font is not None
+        assert self.body_font is not None
+        assert self.small_font is not None
+
+        pygame.draw.rect(surface, PANEL_BACKGROUND, rect, border_radius=14)
+        pygame.draw.rect(surface, PANEL_ACCENT, rect, width=1, border_radius=14)
+
+        title = self.title_font.render("Live Track Metrics", True, TEXT_PRIMARY)
+        surface.blit(title, (rect.x + 18, rect.y + 18))
+
+        summary = self.world.metrics_summary
+        per_object = summary.get("per_object", {})
+        selected_track = self._get_selected_track()
+        y = rect.y + 68
+        help_text = self.small_font.render("Tab / arrows: select track", True, TEXT_MUTED)
+        surface.blit(help_text, (rect.x + 18, y))
+        y += 26
+
+        if selected_track is None:
+            waiting_text = self.small_font.render("Waiting for a confirmed track", True, TEXT_MUTED)
+            surface.blit(waiting_text, (rect.x + 18, y))
+            return
+
+        metrics = per_object.get(selected_track.object_name, {})
+        object_map = {obj.name: obj for obj in self.world.objects}
+        obj = object_map.get(selected_track.object_name)
+        truth_range = 0.0
+        accel_level = 0.0
+        if obj is not None:
+            dx, dy = relative_position(
+                reference_x=self.world.ego.x,
+                reference_y=self.world.ego.y,
+                target_x=obj.x,
+                target_y=obj.y,
+                world_width=self.world.width,
+                world_height=self.world.height,
+            )
+            truth_range = math.hypot(dx, dy)
+            accel_level = obj.second_order_coefficient
+
+        name_text = self.body_font.render(selected_track.object_name, True, self._category_color(selected_track.estimated_category))
+        surface.blit(name_text, (rect.x + 18, y))
+        y += 30
+
+        detail_lines = [
+            f"Track status      {selected_track.track_status}",
+            f"Accel level       {accel_level:0.2f}",
+            f"Detection count   {int(metrics.get('detection_count', 0)):d}",
+            f"Current range     {truth_range:0.1f}",
+            f"Time since update {selected_track.time_since_update:0.2f}",
+            f"RMSE position     {float(metrics.get('position_rmse', 0.0)):0.3f}",
+            f"RMSE speed        {float(metrics.get('velocity_rmse', 0.0)):0.3f}",
+        ]
+        for line in detail_lines:
+            text = self.small_font.render(line, True, TEXT_PRIMARY if "RMSE" in line or "Track status" in line else TEXT_MUTED)
+            surface.blit(text, (rect.x + 18, y))
+            y += 22
+
+    def _draw_status_panel(self, surface: pygame.Surface, rect: pygame.Rect) -> None:
         assert self.title_font is not None
         assert self.body_font is not None
         assert self.small_font is not None
@@ -759,11 +865,14 @@ class SimulationApp:
 
         status = "PAUSED" if self.is_paused else "RUNNING"
         fps = self.clock.get_fps() if self.clock is not None else 0.0
+        summary = self.world.metrics_summary
         lines = [
             f"Status   {status}",
             f"Time     {self.world.sim_time:5.1f}s",
             f"FPS      {fps:5.1f}",
             f"Objects  {len(self.world.all_objects):5d}",
+            f"Tracked  {int(summary.get('tracked_object_count', 0)):5d}",
+            f"Detect   {int(summary.get('total_detections', 0)):5d}",
         ]
         if self.world.radar_sensor is not None:
             lines.extend(
@@ -773,26 +882,37 @@ class SimulationApp:
                     f"Hits     {self.world.radar_sensor.last_detection_count:5d}",
                 ]
             )
+        if self.world.truth_dynamics is not None:
+            lines.extend(
+                [
+                    f"Max acc  {self.world.truth_dynamics.max_acceleration:5.2f}",
+                    f"Coeff rg {self.world.truth_dynamics.default_coefficient_range[0]:0.2f}-{self.world.truth_dynamics.default_coefficient_range[1]:0.2f}",
+                ]
+            )
 
         y = rect.y + 68
         for line in lines:
             text = self.small_font.render(line, True, TEXT_PRIMARY)
             surface.blit(text, (rect.x + 18, y))
-            y += 22
+            y += 20
 
         y += 8
         controls_title = self.body_font.render("Controls", True, TEXT_PRIMARY)
         surface.blit(controls_title, (rect.x + 18, y))
-        y += 30
+        y += 28
         controls = [
             "Space  pause",
+            "Tab    next track",
+            "Arrows select",
             "G      grid",
             "L      labels",
             "V      vectors",
             "T      trails",
             "Esc    quit",
         ]
-        for line in controls:
+        column_gap = 150
+        for index, line in enumerate(controls):
+            column = index % 2
+            row = index // 2
             text = self.small_font.render(line, True, TEXT_MUTED)
-            surface.blit(text, (rect.x + 18, y))
-            y += 20
+            surface.blit(text, (rect.x + 18 + column * column_gap, y + row * 18))

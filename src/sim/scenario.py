@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import random
+
 from src.sim.classification import ClassificationConfig as RuntimeClassificationConfig
 from src.sim.classification import VisionClassifier
 from src.sim.entities import SpaceObject
@@ -13,6 +15,11 @@ from src.utils.config import ScenarioConfig
 
 def build_world(config: ScenarioConfig) -> SimulationWorld:
     style_map = config.class_styles
+    coefficient_rng = random.Random(config.truth_dynamics.coefficient_seed)
+    coefficient_min = max(0.0, min(1.0, config.truth_dynamics.default_coefficient_range[0]))
+    coefficient_max = max(0.0, min(1.0, config.truth_dynamics.default_coefficient_range[1]))
+    if coefficient_max < coefficient_min:
+        coefficient_min, coefficient_max = coefficient_max, coefficient_min
 
     ego_style = style_map[config.ego.object_class]
     ego = SpaceObject(
@@ -31,8 +38,11 @@ def build_world(config: ScenarioConfig) -> SimulationWorld:
     )
 
     objects = []
-    for object_config in config.objects:
+    for index, object_config in enumerate(config.objects):
         style = style_map[object_config.object_class]
+        second_order_coefficient = object_config.second_order_coefficient
+        if second_order_coefficient is None:
+            second_order_coefficient = coefficient_rng.uniform(coefficient_min, coefficient_max)
         objects.append(
             SpaceObject(
                 name=object_config.name,
@@ -46,6 +56,12 @@ def build_world(config: ScenarioConfig) -> SimulationWorld:
                 label=style.label,
                 true_category=object_config.true_category,
                 physical_size=object_config.physical_size,
+                second_order_coefficient=second_order_coefficient,
+                max_acceleration=config.truth_dynamics.max_acceleration,
+                angular_rate=config.truth_dynamics.angular_rate,
+                phase_x=0.9 * index + 0.3,
+                phase_y=1.3 * index + 1.1,
+                turn_sign=1.0 if index % 2 == 0 else -1.0,
             )
         )
 
@@ -85,4 +101,5 @@ def build_world(config: ScenarioConfig) -> SimulationWorld:
         objects=objects,
         radar_sensor=radar_sensor,
         track_manager=track_manager,
+        truth_dynamics=config.truth_dynamics,
     )

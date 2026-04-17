@@ -11,7 +11,7 @@
     "boundary_mode": "wrap",
     "grid_spacing": 100.0,
     "star_count": 0,
-    "seed": 10
+    "seed": 27
   },
   "ui": {
     "show_grid": true,
@@ -26,7 +26,7 @@
     "beam_width_deg": 12.0,
     "range_noise_std": 5.5,
     "bearing_noise_std_deg": 1.9,
-    "seed": 84
+    "seed": 91
   },
   "tracking": {
     "process_variance": 14.0,
@@ -39,6 +39,13 @@
     "min_confidence": 0.22,
     "max_confidence": 0.94,
     "ambiguity_noise_scale": 0.42
+  },
+  "truth_dynamics": {
+    "model": "second_order_bounded",
+    "max_acceleration": 0.38,
+    "angular_rate": 0.24,
+    "coefficient_seed": 43,
+    "default_coefficient_range": [0.45, 0.95]
   },
   "class_styles": {
     "ego": {
@@ -74,7 +81,7 @@
       "true_category": "hazard_debris",
       "physical_size": 3.25,
       "radius": 30.0,
-      "position": [250.0, 160.0],
+      "position": [440.0, 210.0],
       "velocity": [4.7, 2.0]
     },
     {
@@ -83,7 +90,7 @@
       "true_category": "hazard_debris",
       "physical_size": 3.0,
       "radius": 36.0,
-      "position": [1380.0, 700.0],
+      "position": [1180.0, 760.0],
       "velocity": [-6.3, -2.7]
     },
     {
@@ -92,7 +99,7 @@
       "true_category": "target_debris",
       "physical_size": 1.5,
       "radius": 13.5,
-      "position": [1180.0, 260.0],
+      "position": [1130.0, 260.0],
       "velocity": [-4.0, 3.0]
     },
     {
@@ -101,7 +108,7 @@
       "true_category": "target_debris",
       "physical_size": 1.43,
       "radius": 12.0,
-      "position": [320.0, 760.0],
+      "position": [420.0, 830.0],
       "velocity": [3.0, -4.7]
     },
     {
@@ -110,7 +117,7 @@
       "true_category": "neutral_debris",
       "physical_size": 0.36,
       "radius": 3.7,
-      "position": [1030.0, 120.0],
+      "position": [930.0, 110.0],
       "velocity": [1.7, 4.3]
     },
     {
@@ -119,8 +126,44 @@
       "true_category": "neutral_debris",
       "physical_size": 0.34,
       "radius": 4.3,
-      "position": [610.0, 640.0],
+      "position": [560.0, 760.0],
       "velocity": [2.3, -1.7]
+    },
+    {
+      "name": "DEB-C",
+      "object_class": "dangerous_debris",
+      "true_category": "hazard_debris",
+      "physical_size": 3.1,
+      "radius": 32.0,
+      "position": [1010.0, 160.0],
+      "velocity": [-4.4, 5.8]
+    },
+    {
+      "name": "DEB-D",
+      "object_class": "dangerous_debris",
+      "true_category": "hazard_debris",
+      "physical_size": 2.95,
+      "radius": 27.0,
+      "position": [1280.0, 520.0],
+      "velocity": [-5.8, -1.6]
+    },
+    {
+      "name": "COL-C",
+      "object_class": "collectable_debris",
+      "true_category": "target_debris",
+      "physical_size": 1.47,
+      "radius": 12.5,
+      "position": [380.0, 390.0],
+      "velocity": [5.1, 1.5]
+    },
+    {
+      "name": "NEU-D",
+      "object_class": "neutral_object",
+      "true_category": "neutral_debris",
+      "physical_size": 0.37,
+      "radius": 4.4,
+      "position": [1080.0, 980.0],
+      "velocity": [-2.8, -3.9]
     }
   ]
 }

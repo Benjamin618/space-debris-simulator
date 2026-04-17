@@ -51,6 +51,7 @@ class ObjectConfig:
     velocity: Point2D
     true_category: str | None = None
     physical_size: float | None = None
+    second_order_coefficient: float | None = None
 
 
 @dataclass(slots=True)
@@ -80,6 +81,15 @@ class ClassificationConfig:
 
 
 @dataclass(slots=True)
+class TruthDynamicsConfig:
+    model: str
+    max_acceleration: float
+    angular_rate: float
+    coefficient_seed: int
+    default_coefficient_range: Point2D
+
+
+@dataclass(slots=True)
 class ScenarioConfig:
     window: WindowConfig
     world: WorldConfig
@@ -90,6 +100,7 @@ class ScenarioConfig:
     radar: RadarConfig
     tracking: TrackingConfig
     classification: ClassificationConfig
+    truth_dynamics: TruthDynamicsConfig
 
 
 def _as_color(values: list[int]) -> Color:
@@ -113,6 +124,11 @@ def _parse_object(raw: dict[str, object]) -> ObjectConfig:
         velocity=_as_point(raw["velocity"]),
         true_category=str(raw["true_category"]) if "true_category" in raw else None,
         physical_size=float(raw["physical_size"]) if "physical_size" in raw else None,
+        second_order_coefficient=(
+            max(0.0, min(1.0, float(raw["second_order_coefficient"])))
+            if "second_order_coefficient" in raw
+            else None
+        ),
     )
 
 
@@ -177,6 +193,15 @@ def load_scenario_config(path: str | Path) -> ScenarioConfig:
             max_confidence=float(raw.get("classification", {}).get("max_confidence", 0.95)),
             ambiguity_noise_scale=float(
                 raw.get("classification", {}).get("ambiguity_noise_scale", 0.38)
+            ),
+        ),
+        truth_dynamics=TruthDynamicsConfig(
+            model=str(raw.get("truth_dynamics", {}).get("model", "second_order_bounded")),
+            max_acceleration=float(raw.get("truth_dynamics", {}).get("max_acceleration", 2.0)),
+            angular_rate=float(raw.get("truth_dynamics", {}).get("angular_rate", 0.35)),
+            coefficient_seed=int(raw.get("truth_dynamics", {}).get("coefficient_seed", raw["world"]["seed"])),
+            default_coefficient_range=_as_point(
+                raw.get("truth_dynamics", {}).get("default_coefficient_range", [0.2, 0.8])
             ),
         ),
     )

@@ -83,6 +83,7 @@ class Track:
     last_truth_category: str | None = None
     last_detection_x: float = 0.0
     last_detection_y: float = 0.0
+    detection_count: int = 0
     detection_history: list[DetectionRecord] = field(default_factory=list, repr=False)
 
     @classmethod
@@ -108,6 +109,7 @@ class Track:
             last_detection_y=detection_y,
         )
         track.update_classification(classification)
+        track.detection_count = 1
         track.push_detection(detection_x, detection_y, classification.estimated_category)
         return track
 
@@ -131,6 +133,22 @@ class Track:
     def sigma(self) -> float:
         return math.sqrt(max(self.axis_x.p00 + self.axis_y.p00, 1.0))
 
+    @property
+    def sigma_x(self) -> float:
+        return math.sqrt(max(self.axis_x.p00, 1.0))
+
+    @property
+    def sigma_y(self) -> float:
+        return math.sqrt(max(self.axis_y.p00, 1.0))
+
+    @property
+    def track_status(self) -> str:
+        if self.detection_count < 2:
+            return "tentative"
+        if self.time_since_update > 6.0:
+            return "stale"
+        return "confirmed"
+
     def predict(self, dt: float) -> None:
         self.age += dt
         self.time_since_update += dt
@@ -153,6 +171,7 @@ class Track:
         self.last_bearing_deg = detection_bearing_deg
         self.last_detection_x = detection_x
         self.last_detection_y = detection_y
+        self.detection_count += 1
         self.update_classification(classification)
         self.push_detection(detection_x, detection_y, classification.estimated_category)
 
