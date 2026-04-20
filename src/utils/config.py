@@ -132,10 +132,7 @@ def _parse_object(raw: dict[str, object]) -> ObjectConfig:
     )
 
 
-def load_scenario_config(path: str | Path) -> ScenarioConfig:
-    config_path = Path(path)
-    raw = json.loads(config_path.read_text(encoding="utf-8"))
-
+def parse_scenario_config(raw: dict[str, object]) -> ScenarioConfig:
     class_styles = {
         class_name: ClassStyle(
             label=str(style["label"]),
@@ -205,3 +202,9 @@ def load_scenario_config(path: str | Path) -> ScenarioConfig:
             ),
         ),
     )
+
+
+def load_scenario_config(path: str | Path) -> ScenarioConfig:
+    config_path = Path(path)
+    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    return parse_scenario_config(raw)
