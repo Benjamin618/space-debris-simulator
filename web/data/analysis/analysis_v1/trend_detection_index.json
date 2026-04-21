@@ -1,0 +1,178 @@
+[
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.0,
+    "bucket_label": "1",
+    "sample_count": 9,
+    "mean_position_error": 13.28632,
+    "median_position_error": 13.153855,
+    "mean_velocity_error": 5.149942,
+    "median_velocity_error": 5.107837,
+    "mean_truth_range": 316.16009
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.0,
+    "bucket_label": "2-3",
+    "sample_count": 18,
+    "mean_position_error": 15.481187,
+    "median_position_error": 15.176837,
+    "mean_velocity_error": 2.043173,
+    "median_velocity_error": 1.900593,
+    "mean_truth_range": 252.150906
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.0,
+    "bucket_label": "4-6",
+    "sample_count": 27,
+    "mean_position_error": 10.749496,
+    "median_position_error": 10.449683,
+    "mean_velocity_error": 1.111664,
+    "median_velocity_error": 1.103193,
+    "mean_truth_range": 153.990688
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.0,
+    "bucket_label": "7+",
+    "sample_count": 28,
+    "mean_position_error": 7.705216,
+    "median_position_error": 6.116887,
+    "mean_velocity_error": 0.769568,
+    "median_velocity_error": 0.775887,
+    "mean_truth_range": 116.877979
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.25,
+    "bucket_label": "1",
+    "sample_count": 9,
+    "mean_position_error": 13.287845,
+    "median_position_error": 13.153533,
+    "mean_velocity_error": 5.149974,
+    "median_velocity_error": 5.10786,
+    "mean_truth_range": 316.509199
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.25,
+    "bucket_label": "2-3",
+    "sample_count": 18,
+    "mean_position_error": 15.76995,
+    "median_position_error": 15.261807,
+    "mean_velocity_error": 2.142925,
+    "median_velocity_error": 2.063234,
+    "mean_truth_range": 253.763961
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.25,
+    "bucket_label": "4-6",
+    "sample_count": 27,
+    "mean_position_error": 10.564549,
+    "median_position_error": 9.962736,
+    "mean_velocity_error": 1.013388,
+    "median_velocity_error": 0.994041,
+    "mean_truth_range": 167.598074
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.25,
+    "bucket_label": "7+",
+    "sample_count": 30,
+    "mean_position_error": 8.372891,
+    "median_position_error": 8.016456,
+    "mean_velocity_error": 0.889986,
+    "median_velocity_error": 0.77879,
+    "mean_truth_range": 141.777606
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.5,
+    "bucket_label": "1",
+    "sample_count": 9,
+    "mean_position_error": 13.294161,
+    "median_position_error": 13.153251,
+    "mean_velocity_error": 5.150069,
+    "median_velocity_error": 5.107928,
+    "mean_truth_range": 317.13443
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.5,
+    "bucket_label": "2-3",
+    "sample_count": 18,
+    "mean_position_error": 16.245849,
+    "median_position_error": 15.432162,
+    "mean_velocity_error": 2.323904,
+    "median_velocity_error": 2.241533,
+    "mean_truth_range": 257.911851
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.5,
+    "bucket_label": "4-6",
+    "sample_count": 27,
+    "mean_position_error": 11.666184,
+    "median_position_error": 12.309651,
+    "mean_velocity_error": 1.122735,
+    "median_velocity_error": 1.07771,
+    "mean_truth_range": 196.914456
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.5,
+    "bucket_label": "7+",
+    "sample_count": 29,
+    "mean_position_error": 10.730016,
+    "median_position_error": 10.830353,
+    "mean_velocity_error": 1.197991,
+    "median_velocity_error": 1.15827,
+    "mean_truth_range": 202.667659
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.75,
+    "bucket_label": "1",
+    "sample_count": 9,
+    "mean_position_error": 13.306605,
+    "median_position_error": 13.153008,
+    "mean_velocity_error": 5.150228,
+    "median_velocity_error": 5.108041,
+    "mean_truth_range": 318.036203
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.75,
+    "bucket_label": "2-3",
+    "sample_count": 18,
+    "mean_position_error": 16.858403,
+    "median_position_error": 15.578944,
+    "mean_velocity_error": 2.554088,
+    "median_velocity_error": 2.489016,
+    "mean_truth_range": 264.244144
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.75,
+    "bucket_label": "4-6",
+    "sample_count": 26,
+    "mean_position_error": 13.489784,
+    "median_position_error": 14.336036,
+    "mean_velocity_error": 1.423102,
+    "median_velocity_error": 1.376451,
+    "mean_truth_range": 227.131093
+  },
+  {
+    "base_scenario": "scenario_analysis_dense",
+    "coefficient": 0.75,
+    "bucket_label": "7+",
+    "sample_count": 24,
+    "mean_position_error": 12.017146,
+    "median_position_error": 9.897233,
+    "mean_velocity_error": 1.502313,
+    "median_velocity_error": 1.395009,
+    "mean_truth_range": 263.886266
+  }
+]

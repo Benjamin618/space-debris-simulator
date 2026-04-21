@@ -1,0 +1,64 @@
+{
+  "summary_cards": [
+    {
+      "key": "runs_compared",
+      "label": "Runs Compared",
+      "value": 4,
+      "unit": "runs"
+    },
+    {
+      "key": "total_detections",
+      "label": "Total Detections",
+      "value": 326,
+      "unit": "detections"
+    },
+    {
+      "key": "mean_post_update_position_rmse",
+      "label": "Post-update Position RMSE",
+      "value": 13.763602,
+      "unit": "px"
+    },
+    {
+      "key": "mean_post_update_velocity_rmse",
+      "label": "Post-update Velocity RMSE",
+      "value": 2.358363,
+      "unit": "px/s"
+    },
+    {
+      "key": "mean_post_update_position_rmse_after_init",
+      "label": "Position RMSE (5+)",
+      "value": 11.467584,
+      "unit": "px"
+    },
+    {
+      "key": "mean_post_update_velocity_rmse_after_init",
+      "label": "Velocity RMSE (5+)",
+      "value": 1.202856,
+      "unit": "px/s"
+    }
+  ],
+  "experiment": {
+    "base_scenarios": [
+      "scenario_analysis_dense"
+    ],
+    "coefficients": [
+      0.0,
+      0.25,
+      0.5,
+      0.75
+    ],
+    "durations_s": [
+      88.235294
+    ],
+    "total_detections": 326,
+    "total_samples": 170359,
+    "tracking_mean_position_rmse": 38.479228,
+    "tracking_mean_velocity_rmse": 2.512563,
+    "post_update_rmse_after_init_skip": 5
+  },
+  "notes": [
+    "Summary cards prioritize post-update metrics computed only at radar detection instants, where estimates are compared at a consistent measurement-update stage.",
+    "Truth dynamics use bounded second-order motion while the Kalman tracker remains first-order constant velocity.",
+    "Range buckets are expressed in ego-centric radar distance, not world-frame distance."
+  ]
+}

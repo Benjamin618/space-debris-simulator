@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 from pathlib import Path
+from statistics import median
+from typing import Any, Iterable
 
 from src.eval.telemetry import TelemetryRecorder
 from src.sim.scenario import build_world
@@ -21,6 +23,24 @@ class BatchRunResult:
     run_dir: Path
     generated_config_path: Path
     summary: dict[str, object]
+
+
+DETECTION_INDEX_BUCKETS: tuple[tuple[str, int | None, int | None], ...] = (
+    ("1", 1, 1),
+    ("2-3", 2, 3),
+    ("4-6", 4, 6),
+    ("7+", 7, None),
+)
+
+RANGE_BUCKETS: tuple[tuple[str, float, float | None], ...] = (
+    ("0-150", 0.0, 150.0),
+    ("150-250", 150.0, 250.0),
+    ("250-350", 250.0, 350.0),
+    ("350+", 350.0, None),
+)
+
+INIT_SKIP_DETECTIONS = 5
+TRUTH_PATH_SAMPLE_SECONDS = 0.25
 
 
 def run_headless_scenario(
@@ -126,6 +146,7 @@ def run_batch_analysis(
     _write_detections_merged(analysis_dir / "detections_merged.csv", results)
     _write_comparison_json(analysis_dir / "comparison.json", results)
     _write_analysis_report(analysis_dir / "analysis_report.md", results)
+    _write_analysis_v1_bundle(analysis_dir / "analysis_v1", results)
 
     return analysis_dir
 
@@ -348,3 +369,620 @@ def _write_analysis_report(path: Path, results: list[BatchRunResult]) -> None:
     )
 
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _write_analysis_v1_bundle(path: Path, results: list[BatchRunResult]) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+    overview = _build_analysis_overview(results)
+    runs = _build_run_rows(results)
+    objects = _build_object_rows(results)
+    detection_index = _build_detection_index_trend_rows(results)
+    range_rows = _build_range_trend_rows(results)
+    coefficient_rows = _build_coefficient_trend_rows(results)
+    object_trajectories = _build_object_trajectories(results)
+
+    manifest = {
+        "version": "1.0",
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "post_update_rmse_after_init_skip": INIT_SKIP_DETECTIONS,
+        "truth_path_sample_seconds": TRUTH_PATH_SAMPLE_SECONDS,
+        "questions": [
+            "Does tracking improve after several radar detections?",
+            "Does tracking degrade as truth-dynamics non-linearity increases?",
+            "How does target range affect position and velocity errors?",
+        ],
+        "filters": {
+            "base_scenarios": sorted({result.base_scenario for result in results}),
+            "coefficients": sorted({round(result.coefficient, 6) for result in results}),
+            "object_names": sorted({row["object_name"] for row in objects}),
+            "true_categories": sorted({row["true_category"] for row in objects}),
+        },
+        "files": {
+            "overview": "overview.json",
+            "runs": "runs.json",
+            "objects": "objects.json",
+            "trend_detection_index": "trend_detection_index.json",
+            "trend_range": "trend_range.json",
+            "trend_coefficient": "trend_coefficient.json",
+            "object_trajectories": "object_trajectories.json",
+        },
+    }
+
+    _write_json(path / "manifest.json", manifest)
+    _write_json(path / "overview.json", overview)
+    _write_json(path / "runs.json", runs)
+    _write_json(path / "objects.json", objects)
+    _write_json(path / "trend_detection_index.json", detection_index)
+    _write_json(path / "trend_range.json", range_rows)
+    _write_json(path / "trend_coefficient.json", coefficient_rows)
+    _write_json(path / "object_trajectories.json", object_trajectories)
+
+
+def _build_analysis_overview(results: list[BatchRunResult]) -> dict[str, Any]:
+    total_detections = sum(int(result.summary["metrics"]["total_detections"]) for result in results)
+    total_samples = sum(int(result.summary["metrics"]["total_samples"]) for result in results)
+    mean_position_rmse = _mean(
+        float(result.summary["metrics"]["mean_position_rmse"]) for result in results
+    )
+    mean_velocity_rmse = _mean(
+        float(result.summary["metrics"]["mean_velocity_rmse"]) for result in results
+    )
+    post_update_run_rows = _build_run_rows(results)
+    mean_post_update_position_rmse = _mean(
+        float(row["post_update_position_rmse"]) for row in post_update_run_rows
+    )
+    mean_post_update_velocity_rmse = _mean(
+        float(row["post_update_velocity_rmse"]) for row in post_update_run_rows
+    )
+    mean_post_update_position_rmse_after_init = _mean(
+        float(row["post_update_position_rmse_after_init"]) for row in post_update_run_rows
+    )
+    mean_post_update_velocity_rmse_after_init = _mean(
+        float(row["post_update_velocity_rmse_after_init"]) for row in post_update_run_rows
+    )
+    durations = [float(result.duration_s) for result in results]
+    return {
+        "summary_cards": [
+            {"key": "runs_compared", "label": "Runs Compared", "value": len(results), "unit": "runs"},
+            {
+                "key": "total_detections",
+                "label": "Total Detections",
+                "value": total_detections,
+                "unit": "detections",
+            },
+            {
+                "key": "mean_post_update_position_rmse",
+                "label": "Post-update Position RMSE",
+                "value": _round(mean_post_update_position_rmse),
+                "unit": "px",
+            },
+            {
+                "key": "mean_post_update_velocity_rmse",
+                "label": "Post-update Velocity RMSE",
+                "value": _round(mean_post_update_velocity_rmse),
+                "unit": "px/s",
+            },
+            {
+                "key": "mean_post_update_position_rmse_after_init",
+                "label": f"Position RMSE ({INIT_SKIP_DETECTIONS}+)",
+                "value": _round(mean_post_update_position_rmse_after_init),
+                "unit": "px",
+            },
+            {
+                "key": "mean_post_update_velocity_rmse_after_init",
+                "label": f"Velocity RMSE ({INIT_SKIP_DETECTIONS}+)",
+                "value": _round(mean_post_update_velocity_rmse_after_init),
+                "unit": "px/s",
+            },
+        ],
+        "experiment": {
+            "base_scenarios": sorted({result.base_scenario for result in results}),
+            "coefficients": sorted({round(result.coefficient, 6) for result in results}),
+            "durations_s": sorted({round(duration, 6) for duration in durations}),
+            "total_detections": total_detections,
+            "total_samples": total_samples,
+            "tracking_mean_position_rmse": _round(mean_position_rmse),
+            "tracking_mean_velocity_rmse": _round(mean_velocity_rmse),
+            "post_update_rmse_after_init_skip": INIT_SKIP_DETECTIONS,
+        },
+        "notes": [
+            "Summary cards prioritize post-update metrics computed only at radar detection instants, where estimates are compared at a consistent measurement-update stage.",
+            "Truth dynamics use bounded second-order motion while the Kalman tracker remains first-order constant velocity.",
+            "Range buckets are expressed in ego-centric radar distance, not world-frame distance.",
+        ],
+    }
+
+
+def _build_run_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient)):
+        metrics = result.summary["metrics"]
+        truth_dynamics = result.summary["truth_dynamics"]
+        detection_stats = _build_detection_stats_for_run(result)
+        rows.append(
+            {
+                "base_scenario": result.base_scenario,
+                "variant_name": result.variant_name,
+                "coefficient": _round(result.coefficient),
+                "duration_s": _round(result.duration_s),
+                "frames": result.frames,
+                "max_acceleration": _round(float(truth_dynamics["max_acceleration"])),
+                "angular_rate": _round(float(truth_dynamics["angular_rate"])),
+                "tracked_object_count": int(metrics["tracked_object_count"]),
+                "total_samples": int(metrics["total_samples"]),
+                "total_detections": int(metrics["total_detections"]),
+                "tracking_mean_position_rmse": _round(float(metrics["mean_position_rmse"])),
+                "tracking_mean_velocity_rmse": _round(float(metrics["mean_velocity_rmse"])),
+                "max_position_rmse": _round(float(metrics["max_position_rmse"])),
+                "max_velocity_rmse": _round(float(metrics["max_velocity_rmse"])),
+                "post_update_samples": int(detection_stats["samples"]),
+                "post_update_position_rmse": _round(detection_stats["position_rmse"]),
+                "post_update_velocity_rmse": _round(detection_stats["velocity_rmse"]),
+                "post_update_mean_position_error": _round(detection_stats["mean_position_error"]),
+                "post_update_mean_velocity_error": _round(detection_stats["mean_velocity_error"]),
+                "post_update_median_position_error": _round(detection_stats["median_position_error"]),
+                "post_update_median_velocity_error": _round(detection_stats["median_velocity_error"]),
+                "post_update_samples_after_init": int(detection_stats["samples_after_init"]),
+                "post_update_position_rmse_after_init": _round(detection_stats["position_rmse_after_init"]),
+                "post_update_velocity_rmse_after_init": _round(detection_stats["velocity_rmse_after_init"]),
+                "run_dir": str(result.run_dir),
+                "generated_config_path": str(result.generated_config_path),
+            }
+        )
+    return rows
+
+
+def _build_object_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient)):
+        object_meta = {
+            entry["name"]: entry for entry in result.summary.get("objects", [])
+        }
+        per_object = result.summary["metrics"]["per_object"]
+        per_object_detection_stats = _build_detection_stats_by_object(result)
+        for object_name, metrics in sorted(per_object.items()):
+            meta = object_meta.get(object_name, {})
+            detection_stats = per_object_detection_stats.get(object_name, _empty_detection_stats())
+            rows.append(
+                {
+                    "base_scenario": result.base_scenario,
+                    "variant_name": result.variant_name,
+                    "coefficient": _round(result.coefficient),
+                    "object_name": object_name,
+                    "true_category": meta.get("true_category", ""),
+                    "second_order_coefficient": _round(
+                        float(meta.get("second_order_coefficient", result.coefficient))
+                    ),
+                    "samples": int(metrics["samples"]),
+                    "detection_count": int(metrics["detection_count"]),
+                    "tracking_position_rmse": _round(float(metrics["position_rmse"])),
+                    "tracking_velocity_rmse": _round(float(metrics["velocity_rmse"])),
+                    "tracking_mean_position_error": _round(float(metrics["mean_position_error"])),
+                    "tracking_mean_velocity_error": _round(float(metrics["mean_velocity_error"])),
+                    "max_position_error": _round(float(metrics["max_position_error"])),
+                    "mean_time_since_update": _round(float(metrics["mean_time_since_update"])),
+                    "post_update_samples": int(detection_stats["samples"]),
+                    "post_update_position_rmse": _round(detection_stats["position_rmse"]),
+                    "post_update_velocity_rmse": _round(detection_stats["velocity_rmse"]),
+                    "post_update_mean_position_error": _round(detection_stats["mean_position_error"]),
+                    "post_update_mean_velocity_error": _round(detection_stats["mean_velocity_error"]),
+                    "post_update_median_position_error": _round(detection_stats["median_position_error"]),
+                    "post_update_median_velocity_error": _round(detection_stats["median_velocity_error"]),
+                    "post_update_samples_after_init": int(detection_stats["samples_after_init"]),
+                    "post_update_position_rmse_after_init": _round(detection_stats["position_rmse_after_init"]),
+                    "post_update_velocity_rmse_after_init": _round(detection_stats["velocity_rmse_after_init"]),
+                }
+            )
+    return rows
+
+
+def _build_detection_index_trend_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, float, str], dict[str, Any]] = {}
+    for result, row in _iter_detection_rows(results):
+        bucket_label = _bucket_detection_index(int(row["object_detection_index"]))
+        key = (result.base_scenario, result.coefficient, bucket_label)
+        group = groups.setdefault(
+            key,
+            {
+                "base_scenario": result.base_scenario,
+                "coefficient": result.coefficient,
+                "bucket_label": bucket_label,
+                "sample_count": 0,
+                "position_errors": [],
+                "velocity_errors": [],
+                "truth_ranges": [],
+            },
+        )
+        group["sample_count"] += 1
+        group["position_errors"].append(float(row["position_error"]))
+        group["velocity_errors"].append(float(row["velocity_error"]))
+        group["truth_ranges"].append(float(row["truth_range"]))
+    return _finalize_detection_trend_rows(groups.values())
+
+
+def _build_range_trend_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
+    groups: dict[tuple[str, float, str], dict[str, Any]] = {}
+    for result, row in _iter_detection_rows(results):
+        bucket_label = _bucket_range(float(row["truth_range"]))
+        key = (result.base_scenario, result.coefficient, bucket_label)
+        group = groups.setdefault(
+            key,
+            {
+                "base_scenario": result.base_scenario,
+                "coefficient": result.coefficient,
+                "bucket_label": bucket_label,
+                "sample_count": 0,
+                "position_errors": [],
+                "velocity_errors": [],
+                "detection_indices": [],
+                "truth_ranges": [],
+            },
+        )
+        group["sample_count"] += 1
+        group["position_errors"].append(float(row["position_error"]))
+        group["velocity_errors"].append(float(row["velocity_error"]))
+        group["detection_indices"].append(float(row["object_detection_index"]))
+        group["truth_ranges"].append(float(row["truth_range"]))
+
+    rows: list[dict[str, Any]] = []
+    for group in sorted(groups.values(), key=lambda item: (item["base_scenario"], item["coefficient"], _range_bucket_index(item["bucket_label"]))):
+        rows.append(
+            {
+                "base_scenario": group["base_scenario"],
+                "coefficient": _round(float(group["coefficient"])),
+                "bucket_label": group["bucket_label"],
+                "sample_count": int(group["sample_count"]),
+                "mean_position_error": _round(_mean(group["position_errors"])),
+                "median_position_error": _round(median(group["position_errors"])),
+                "mean_velocity_error": _round(_mean(group["velocity_errors"])),
+                "median_velocity_error": _round(median(group["velocity_errors"])),
+                "mean_detection_index": _round(_mean(group["detection_indices"])),
+                "mean_truth_range": _round(_mean(group["truth_ranges"])),
+            }
+        )
+    return rows
+
+
+def _build_coefficient_trend_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
+    detection_groups: dict[tuple[str, float], dict[str, Any]] = {}
+    for result, row in _iter_detection_rows(results):
+        key = (result.base_scenario, result.coefficient)
+        group = detection_groups.setdefault(
+            key,
+            {
+                "position_errors": [],
+                "velocity_errors": [],
+                "position_errors_after_init": [],
+                "velocity_errors_after_init": [],
+                "truth_ranges": [],
+            },
+        )
+        group["position_errors"].append(float(row["position_error"]))
+        group["velocity_errors"].append(float(row["velocity_error"]))
+        if int(row["object_detection_index"]) > INIT_SKIP_DETECTIONS:
+            group["position_errors_after_init"].append(float(row["position_error"]))
+            group["velocity_errors_after_init"].append(float(row["velocity_error"]))
+        group["truth_ranges"].append(float(row["truth_range"]))
+
+    rows: list[dict[str, Any]] = []
+    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient)):
+        metrics = result.summary["metrics"]
+        detection_group = detection_groups.get((result.base_scenario, result.coefficient), {})
+        rows.append(
+            {
+                "base_scenario": result.base_scenario,
+                "variant_name": result.variant_name,
+                "coefficient": _round(result.coefficient),
+                "max_acceleration": _round(float(result.summary["truth_dynamics"]["max_acceleration"])),
+                "angular_rate": _round(float(result.summary["truth_dynamics"]["angular_rate"])),
+                "tracked_object_count": int(metrics["tracked_object_count"]),
+                "total_detections": int(metrics["total_detections"]),
+                "tracking_mean_position_rmse": _round(float(metrics["mean_position_rmse"])),
+                "tracking_mean_velocity_rmse": _round(float(metrics["mean_velocity_rmse"])),
+                "post_update_position_rmse": _round(_rmse_from_errors(detection_group.get("position_errors", []))),
+                "post_update_velocity_rmse": _round(_rmse_from_errors(detection_group.get("velocity_errors", []))),
+                "post_update_position_rmse_after_init": _round(
+                    _rmse_from_errors(detection_group.get("position_errors_after_init", []))
+                ),
+                "post_update_velocity_rmse_after_init": _round(
+                    _rmse_from_errors(detection_group.get("velocity_errors_after_init", []))
+                ),
+                "mean_position_error": _round(_mean(detection_group.get("position_errors", []))),
+                "mean_velocity_error": _round(_mean(detection_group.get("velocity_errors", []))),
+                "median_position_error": _round(_median_or_zero(detection_group.get("position_errors", []))),
+                "median_velocity_error": _round(_median_or_zero(detection_group.get("velocity_errors", []))),
+                "mean_truth_range": _round(_mean(detection_group.get("truth_ranges", []))),
+            }
+        )
+    return rows
+
+
+def _build_object_trajectories(results: list[BatchRunResult]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient)):
+        truth_by_object: dict[str, list[dict[str, float]]] = {}
+        truth_path = result.run_dir / "truth.csv"
+        with truth_path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                truth_by_object.setdefault(row["object_name"], []).append(
+                    {
+                        "time": _round(float(row["time"])),
+                        "x": _round(float(row["truth_rel_x"])),
+                        "y": _round(float(row["truth_rel_y"])),
+                        "vx": _round(float(row["truth_rel_vx"])),
+                        "vy": _round(float(row["truth_rel_vy"])),
+                    }
+                )
+        for object_name, truth_points in list(truth_by_object.items()):
+            truth_by_object[object_name] = _downsample_truth_path(truth_points)
+
+        detections_by_object: dict[str, dict[str, list[dict[str, float]]]] = {}
+        detection_path = result.run_dir / "detections.csv"
+        with detection_path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                object_name = row["object_name"]
+                bucket = detections_by_object.setdefault(
+                    object_name,
+                    {"measured": [], "estimated": [], "meta": []},
+                )
+                bucket["measured"].append(
+                    {
+                        "time": _round(float(row["time"])),
+                        "index": int(row["object_detection_index"]),
+                        "x": _round(float(row["measured_x"])),
+                        "y": _round(float(row["measured_y"])),
+                    }
+                )
+                bucket["estimated"].append(
+                    {
+                        "time": _round(float(row["time"])),
+                        "index": int(row["object_detection_index"]),
+                        "x": _round(float(row["est_x"])),
+                        "y": _round(float(row["est_y"])),
+                    }
+                )
+                bucket["meta"].append(
+                    {
+                        "time": _round(float(row["time"])),
+                        "index": int(row["object_detection_index"]),
+                        "truth_x": _round(float(row["truth_rel_x"])),
+                        "truth_y": _round(float(row["truth_rel_y"])),
+                        "range": _round(float(row["truth_range"])),
+                        "position_error": _round(float(row["position_error"])),
+                        "velocity_error": _round(float(row["velocity_error"])),
+                    }
+                )
+
+        objects_meta = {entry["name"]: entry for entry in result.summary.get("objects", [])}
+        object_rows = [row for row in _build_object_rows([result])]
+        object_metrics = {row["object_name"]: row for row in object_rows}
+
+        for object_name, truth_points in sorted(truth_by_object.items()):
+            detection_bundle = detections_by_object.get(
+                object_name,
+                {"measured": [], "estimated": [], "meta": []},
+            )
+            metrics = object_metrics.get(object_name, {})
+            meta = objects_meta.get(object_name, {})
+            rows.append(
+                {
+                    "base_scenario": result.base_scenario,
+                    "variant_name": result.variant_name,
+                    "coefficient": _round(result.coefficient),
+                    "object_name": object_name,
+                    "true_category": meta.get("true_category", ""),
+                    "second_order_coefficient": _round(
+                        float(meta.get("second_order_coefficient", result.coefficient))
+                    ),
+                    "truth_path": truth_points,
+                    "measured_points": detection_bundle["measured"],
+                    "estimated_path": detection_bundle["estimated"],
+                    "detection_meta": detection_bundle["meta"],
+                    "post_update_position_rmse": metrics.get("post_update_position_rmse", 0.0),
+                    "post_update_velocity_rmse": metrics.get("post_update_velocity_rmse", 0.0),
+                    "post_update_position_rmse_after_init": metrics.get("post_update_position_rmse_after_init", 0.0),
+                    "post_update_velocity_rmse_after_init": metrics.get("post_update_velocity_rmse_after_init", 0.0),
+                    "detection_count": metrics.get("detection_count", len(detection_bundle["measured"])),
+                }
+            )
+    return rows
+
+
+def _finalize_detection_trend_rows(groups: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for group in sorted(
+        groups,
+        key=lambda item: (item["base_scenario"], item["coefficient"], _detection_bucket_index(item["bucket_label"])),
+    ):
+        rows.append(
+            {
+                "base_scenario": group["base_scenario"],
+                "coefficient": _round(float(group["coefficient"])),
+                "bucket_label": group["bucket_label"],
+                "sample_count": int(group["sample_count"]),
+                "mean_position_error": _round(_mean(group["position_errors"])),
+                "median_position_error": _round(median(group["position_errors"])),
+                "mean_velocity_error": _round(_mean(group["velocity_errors"])),
+                "median_velocity_error": _round(median(group["velocity_errors"])),
+                "mean_truth_range": _round(_mean(group["truth_ranges"])),
+            }
+        )
+    return rows
+
+
+def _iter_detection_rows(results: list[BatchRunResult]) -> Iterable[tuple[BatchRunResult, dict[str, str]]]:
+    for result in results:
+        detection_path = result.run_dir / "detections.csv"
+        with detection_path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                yield result, row
+
+
+def _build_detection_stats_for_run(result: BatchRunResult) -> dict[str, float]:
+    position_errors: list[float] = []
+    velocity_errors: list[float] = []
+    position_errors_after_init: list[float] = []
+    velocity_errors_after_init: list[float] = []
+    for _, row in _iter_detection_rows([result]):
+        position_errors.append(float(row["position_error"]))
+        velocity_errors.append(float(row["velocity_error"]))
+        if int(row["object_detection_index"]) > INIT_SKIP_DETECTIONS:
+            position_errors_after_init.append(float(row["position_error"]))
+            velocity_errors_after_init.append(float(row["velocity_error"]))
+    return _finalize_detection_stats(
+        position_errors,
+        velocity_errors,
+        position_errors_after_init,
+        velocity_errors_after_init,
+    )
+
+
+def _build_detection_stats_by_object(result: BatchRunResult) -> dict[str, dict[str, float]]:
+    grouped: dict[str, dict[str, list[float]]] = {}
+    for _, row in _iter_detection_rows([result]):
+        entry = grouped.setdefault(
+            row["object_name"],
+            {
+                "position_errors": [],
+                "velocity_errors": [],
+                "position_errors_after_init": [],
+                "velocity_errors_after_init": [],
+            },
+        )
+        entry["position_errors"].append(float(row["position_error"]))
+        entry["velocity_errors"].append(float(row["velocity_error"]))
+        if int(row["object_detection_index"]) > INIT_SKIP_DETECTIONS:
+            entry["position_errors_after_init"].append(float(row["position_error"]))
+            entry["velocity_errors_after_init"].append(float(row["velocity_error"]))
+
+    return {
+        object_name: _finalize_detection_stats(
+            values["position_errors"],
+            values["velocity_errors"],
+            values["position_errors_after_init"],
+            values["velocity_errors_after_init"],
+        )
+        for object_name, values in grouped.items()
+    }
+
+
+def _finalize_detection_stats(
+    position_errors: list[float],
+    velocity_errors: list[float],
+    position_errors_after_init: list[float],
+    velocity_errors_after_init: list[float],
+) -> dict[str, float]:
+    if not position_errors or not velocity_errors:
+        return _empty_detection_stats()
+    return {
+        "samples": len(position_errors),
+        "position_rmse": _rmse_from_errors(position_errors),
+        "velocity_rmse": _rmse_from_errors(velocity_errors),
+        "mean_position_error": _mean(position_errors),
+        "mean_velocity_error": _mean(velocity_errors),
+        "median_position_error": _median_or_zero(position_errors),
+        "median_velocity_error": _median_or_zero(velocity_errors),
+        "samples_after_init": len(position_errors_after_init),
+        "position_rmse_after_init": _rmse_from_errors(position_errors_after_init),
+        "velocity_rmse_after_init": _rmse_from_errors(velocity_errors_after_init),
+    }
+
+
+def _empty_detection_stats() -> dict[str, float]:
+    return {
+        "samples": 0,
+        "position_rmse": 0.0,
+        "velocity_rmse": 0.0,
+        "mean_position_error": 0.0,
+        "mean_velocity_error": 0.0,
+        "median_position_error": 0.0,
+        "median_velocity_error": 0.0,
+        "samples_after_init": 0,
+        "position_rmse_after_init": 0.0,
+        "velocity_rmse_after_init": 0.0,
+    }
+
+
+def _bucket_detection_index(index: int) -> str:
+    for label, start, end in DETECTION_INDEX_BUCKETS:
+        if start is None:
+            continue
+        if end is None and index >= start:
+            return label
+        if end is not None and start <= index <= end:
+            return label
+    return DETECTION_INDEX_BUCKETS[-1][0]
+
+
+def _bucket_range(distance: float) -> str:
+    for label, lower, upper in RANGE_BUCKETS:
+        if upper is None and distance >= lower:
+            return label
+        if lower <= distance < upper:
+            return label
+    return RANGE_BUCKETS[-1][0]
+
+
+def _detection_bucket_index(label: str) -> int:
+    for index, (bucket_label, _, _) in enumerate(DETECTION_INDEX_BUCKETS):
+        if bucket_label == label:
+            return index
+    return len(DETECTION_INDEX_BUCKETS)
+
+
+def _range_bucket_index(label: str) -> int:
+    for index, (bucket_label, _, _) in enumerate(RANGE_BUCKETS):
+        if bucket_label == label:
+            return index
+    return len(RANGE_BUCKETS)
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _downsample_truth_path(points: list[dict[str, float]]) -> list[dict[str, float]]:
+    if len(points) <= 2:
+        return points
+
+    sampled: list[dict[str, float]] = [points[0]]
+    last_kept_time = float(points[0]["time"])
+
+    for point in points[1:-1]:
+        point_time = float(point["time"])
+        if point_time - last_kept_time >= TRUTH_PATH_SAMPLE_SECONDS:
+            sampled.append(point)
+            last_kept_time = point_time
+
+    if sampled[-1] is not points[-1]:
+        sampled.append(points[-1])
+    return sampled
+
+
+def _mean(values: Iterable[float]) -> float:
+    values_list = list(values)
+    if not values_list:
+        return 0.0
+    return sum(values_list) / len(values_list)
+
+
+def _median_or_zero(values: Iterable[float]) -> float:
+    values_list = list(values)
+    if not values_list:
+        return 0.0
+    return float(median(values_list))
+
+
+def _rmse_from_errors(values: Iterable[float]) -> float:
+    values_list = list(values)
+    if not values_list:
+        return 0.0
+    return (_mean(value * value for value in values_list)) ** 0.5
+
+
+def _round(value: float, digits: int = 6) -> float:
+    return round(float(value), digits)

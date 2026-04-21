@@ -1,0 +1,47 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-04-21T15:50:09",
+  "post_update_rmse_after_init_skip": 5,
+  "truth_path_sample_seconds": 0.25,
+  "questions": [
+    "Does tracking improve after several radar detections?",
+    "Does tracking degrade as truth-dynamics non-linearity increases?",
+    "How does target range affect position and velocity errors?"
+  ],
+  "filters": {
+    "base_scenarios": [
+      "scenario_analysis_dense"
+    ],
+    "coefficients": [
+      0.0,
+      0.25,
+      0.5,
+      0.75
+    ],
+    "object_names": [
+      "COL-A",
+      "COL-B",
+      "COL-C",
+      "DEB-A",
+      "DEB-B",
+      "DEB-C",
+      "NEU-A",
+      "NEU-B",
+      "NEU-D"
+    ],
+    "true_categories": [
+      "hazard_debris",
+      "neutral_debris",
+      "target_debris"
+    ]
+  },
+  "files": {
+    "overview": "overview.json",
+    "runs": "runs.json",
+    "objects": "objects.json",
+    "trend_detection_index": "trend_detection_index.json",
+    "trend_range": "trend_range.json",
+    "trend_coefficient": "trend_coefficient.json",
+    "object_trajectories": "object_trajectories.json"
+  }
+}
