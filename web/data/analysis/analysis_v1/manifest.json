@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-04-21T15:50:09",
+  "generated_at": "2026-04-22T11:21:34",
   "post_update_rmse_after_init_skip": 5,
   "truth_path_sample_seconds": 0.25,
   "questions": [
@@ -10,7 +10,7 @@
   ],
   "filters": {
     "base_scenarios": [
-      "scenario_analysis_dense"
+      "scenario_analysis_minimal"
     ],
     "coefficients": [
       0.0,
@@ -18,16 +18,27 @@
       0.5,
       0.75
     ],
+    "scan_rates_deg_s": [
+      30.0,
+      40.8,
+      50.0
+    ],
+    "seeds": [
+      11,
+      23,
+      41,
+      57,
+      77,
+      91,
+      103,
+      121,
+      149,
+      173
+    ],
     "object_names": [
       "COL-A",
-      "COL-B",
-      "COL-C",
       "DEB-A",
-      "DEB-B",
-      "DEB-C",
-      "NEU-A",
-      "NEU-B",
-      "NEU-D"
+      "NEU-A"
     ],
     "true_categories": [
       "hazard_debris",

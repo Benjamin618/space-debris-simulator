@@ -273,6 +273,7 @@ class TelemetryRecorder:
                 "width": world.width,
                 "height": world.height,
                 "sim_time": world.sim_time,
+                "time_scale": self._config.world.time_scale,
             },
             "radar": asdict(self._config.radar),
             "tracking": asdict(self._config.tracking),

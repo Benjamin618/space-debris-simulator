@@ -11,7 +11,8 @@
     "boundary_mode": "wrap",
     "grid_spacing": 100.0,
     "star_count": 0,
-    "seed": 27
+    "seed": 27,
+    "time_scale": 14.0
   },
   "ui": {
     "show_grid": true,
@@ -21,17 +22,17 @@
     "side_panel_width": 420
   },
   "radar": {
-    "max_range": 410.0,
+    "max_range": 450.0,
     "scan_rate_deg_s": 36.0,
     "beam_width_deg": 12.0,
-    "range_noise_std": 5.5,
-    "bearing_noise_std_deg": 1.9,
+    "range_noise_std": 4.5,
+    "bearing_noise_std_deg": 1.2,
     "seed": 91
   },
   "tracking": {
-    "process_variance": 14.0,
-    "measurement_variance": 22.0,
-    "initial_measurement_variance": 42.0
+    "process_variance": 0.12,
+    "measurement_variance": 42.0,
+    "initial_measurement_variance": 84.0
   },
   "classification": {
     "full_quality_range": 150.0,
@@ -42,8 +43,8 @@
   },
   "truth_dynamics": {
     "model": "second_order_bounded",
-    "max_acceleration": 0.38,
-    "angular_rate": 0.24,
+    "max_acceleration": 0.0065,
+    "angular_rate": 0.12,
     "coefficient_seed": 43,
     "default_coefficient_range": [0.45, 0.95]
   },
@@ -82,7 +83,7 @@
       "physical_size": 3.25,
       "radius": 30.0,
       "position": [440.0, 210.0],
-      "velocity": [4.7, 2.0]
+      "velocity": [0.55, 0.22]
     },
     {
       "name": "DEB-B",
@@ -91,7 +92,7 @@
       "physical_size": 3.0,
       "radius": 36.0,
       "position": [1180.0, 760.0],
-      "velocity": [-6.3, -2.7]
+      "velocity": [-0.78, -0.30]
     },
     {
       "name": "COL-A",
@@ -100,7 +101,7 @@
       "physical_size": 1.5,
       "radius": 13.5,
       "position": [1130.0, 260.0],
-      "velocity": [-4.0, 3.0]
+      "velocity": [-0.34, 0.28]
     },
     {
       "name": "COL-B",
@@ -109,7 +110,7 @@
       "physical_size": 1.43,
       "radius": 12.0,
       "position": [420.0, 830.0],
-      "velocity": [3.0, -4.7]
+      "velocity": [0.28, -0.42]
     },
     {
       "name": "NEU-A",
@@ -118,7 +119,7 @@
       "physical_size": 0.36,
       "radius": 3.7,
       "position": [930.0, 110.0],
-      "velocity": [1.7, 4.3]
+      "velocity": [0.14, 0.34]
     },
     {
       "name": "NEU-B",
@@ -127,7 +128,7 @@
       "physical_size": 0.34,
       "radius": 4.3,
       "position": [560.0, 760.0],
-      "velocity": [2.3, -1.7]
+      "velocity": [0.20, -0.16]
     },
     {
       "name": "DEB-C",
@@ -136,7 +137,7 @@
       "physical_size": 3.1,
       "radius": 32.0,
       "position": [1010.0, 160.0],
-      "velocity": [-4.4, 5.8]
+      "velocity": [-0.42, 0.54]
     },
     {
       "name": "DEB-D",
@@ -145,7 +146,7 @@
       "physical_size": 2.95,
       "radius": 27.0,
       "position": [1280.0, 520.0],
-      "velocity": [-5.8, -1.6]
+      "velocity": [-0.64, -0.18]
     },
     {
       "name": "COL-C",
@@ -154,7 +155,7 @@
       "physical_size": 1.47,
       "radius": 12.5,
       "position": [380.0, 390.0],
-      "velocity": [5.1, 1.5]
+      "velocity": [0.48, 0.14]
     },
     {
       "name": "NEU-D",
@@ -163,7 +164,7 @@
       "physical_size": 0.37,
       "radius": 4.4,
       "position": [1080.0, 980.0],
-      "velocity": [-2.8, -3.9]
+      "velocity": [-0.18, -0.36]
     }
   ]
 }

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=2026-04-22-analysis-ui">
 </head>
 <body>
   <div class="analysis-shell">
@@ -23,10 +23,10 @@
         </div>
         <div class="analysis-intro">
           <p class="analysis-lead">
-            This page summarizes the V3 GNC experiment: bounded second-order truth dynamics versus a first-order constant-velocity Kalman tracker.
+            This page summarizes the V3 GNC proximity experiment in physical units: bounded second-order truth dynamics versus a first-order constant-velocity Kalman tracker.
           </p>
           <p class="analysis-subtle">
-            The current dataset uses the minimal analysis scenario with one hazard, one target, and one neutral debris object.
+            The current dataset uses a minimal LEO proximity scenario with one hazard, one target, and one neutral object, swept across non-linearity level, radar revisit rate, and seed.
           </p>
         </div>
       </div>
@@ -34,7 +34,7 @@
 
     <main class="analysis-main">
       <section class="analysis-grid">
-        <article class="panel analysis-panel">
+        <article class="panel analysis-panel analysis-panel-overview">
           <h2>Analysis Overview</h2>
           <div id="summary-cards" class="summary-card-grid"></div>
           <div class="analysis-notes-layout">
@@ -53,29 +53,48 @@
           </div>
         </article>
 
-        <article class="panel analysis-panel">
+        <article class="panel analysis-panel analysis-panel-run-list">
           <div class="section-head">
             <div>
-              <h2>Run Comparison</h2>
-              <p class="section-caption">One row per generated batch run.</p>
+              <h2>Run List</h2>
+              <p class="section-caption">Compact scrollable run list with filtering and sorting. Clicking one item loads it into Track A.</p>
+            </div>
+            <div class="run-table-toolbar">
+              <label class="field field-compact">
+                <span>Sort by</span>
+                <select id="runs-sort-key"></select>
+              </label>
+              <label class="field field-compact">
+                <span>Direction</span>
+                <select id="runs-sort-dir">
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
+                </select>
+              </label>
+              <label class="field field-compact run-filter-field">
+                <span>Filter list</span>
+                <input id="runs-text-filter" type="text" placeholder="coef 0.50, seed 41, 50 deg/s...">
+              </label>
             </div>
           </div>
-          <div class="table-shell">
-            <table class="analysis-table">
-              <thead>
-                <tr>
-                  <th>Run</th>
-                  <th>Coef</th>
-                  <th>Max Acc</th>
-                  <th>Ang Rate</th>
-                  <th>Detections</th>
-                  <th>Post-update RMSE Pos</th>
-                  <th>Post-update RMSE Vel</th>
-                </tr>
-              </thead>
-              <tbody id="runs-table-body"></tbody>
-            </table>
+          <div class="run-list-shell">
+            <div class="run-list-head">
+              <span>Run list</span>
+              <span id="run-comparison-summary" class="accordion-meta">0 runs shown</span>
+            </div>
+            <div id="runs-list" class="run-list"></div>
           </div>
+        </article>
+
+        <article class="panel analysis-panel analysis-panel-wide">
+          <div class="section-head">
+            <div>
+              <h2>Guided Observations</h2>
+              <p class="section-caption">Auto-generated reading aids to turn the batch into engineering observations.</p>
+            </div>
+          </div>
+          <div id="guided-observation-grid" class="guided-observation-grid"></div>
+          <ul id="guided-observation-notes" class="analysis-list guided-observation-notes"></ul>
         </article>
 
         <article class="panel analysis-panel analysis-panel-wide">
@@ -87,36 +106,51 @@
           </div>
           <div class="trajectory-layout">
             <div class="trajectory-canvas-shell">
-              <div class="trajectory-controls">
-                <div class="trajectory-control-group">
-                  <label class="field">
-                    <span>Track A Run</span>
-                    <select id="trajectory-run-a"></select>
-                  </label>
-                  <label class="field">
-                    <span>Track A Object</span>
-                    <select id="trajectory-track-a"></select>
-                  </label>
-                </div>
-                <div class="trajectory-control-group">
-                  <label class="field">
-                    <span>Track B Run</span>
-                    <select id="trajectory-run-b"></select>
-                  </label>
-                  <label class="field">
-                    <span>Track B Object</span>
+                <div class="trajectory-controls">
+                  <div class="trajectory-control-group">
+                    <label class="field">
+                      <span>Track A Accel</span>
+                      <select id="trajectory-coeff-a"></select>
+                    </label>
+                    <label class="field">
+                      <span>Track A Radar</span>
+                      <select id="trajectory-scan-a"></select>
+                    </label>
+                    <label class="field">
+                      <span>Track A Seed</span>
+                      <select id="trajectory-seed-a"></select>
+                    </label>
+                    <label class="field">
+                      <span>Track A Object</span>
+                      <select id="trajectory-track-a"></select>
+                    </label>
+                  </div>
+                  <div class="trajectory-control-group">
+                    <label class="field">
+                      <span>Track B Accel</span>
+                      <select id="trajectory-coeff-b"></select>
+                    </label>
+                    <label class="field">
+                      <span>Track B Radar</span>
+                      <select id="trajectory-scan-b"></select>
+                    </label>
+                    <label class="field">
+                      <span>Track B Seed</span>
+                      <select id="trajectory-seed-b"></select>
+                    </label>
+                    <label class="field">
+                      <span>Track B Object</span>
                     <select id="trajectory-track-b"></select>
                   </label>
                 </div>
               </div>
               <canvas id="trajectory-canvas" width="860" height="330"></canvas>
-            </div>
-            <div class="trajectory-meta">
-              <h3 class="panel-subtitle">Track Overlay</h3>
-              <div class="trajectory-track-cards">
-                <section class="trajectory-track-card">
-                  <div class="trajectory-card-head">
-                    <span class="trajectory-swatch trajectory-swatch-a"></span>
+              </div>
+              <div class="trajectory-meta">
+                <div class="trajectory-track-cards">
+                  <section class="trajectory-track-card">
+                    <div class="trajectory-card-head">
+                      <span class="trajectory-swatch trajectory-swatch-a"></span>
                     <h4 id="trajectory-a-title" class="trajectory-card-title">Track A</h4>
                   </div>
                   <dl id="trajectory-a-stats" class="summary-list trajectory-summary-list"></dl>
@@ -128,151 +162,63 @@
                     <h4 id="trajectory-b-title" class="trajectory-card-title">Track B</h4>
                   </div>
                   <dl id="trajectory-b-stats" class="summary-list trajectory-summary-list"></dl>
-                  <p id="trajectory-b-note" class="trajectory-track-note"></p>
-                </section>
+                    <p id="trajectory-b-note" class="trajectory-track-note"></p>
+                  </section>
+                </div>
+                <div class="trajectory-detection-cards">
+                  <section class="trajectory-track-card">
+                    <div class="trajectory-card-head">
+                      <span class="trajectory-swatch trajectory-swatch-a"></span>
+                      <h4 class="trajectory-card-title">Track A Detection Details</h4>
+                    </div>
+                    <div class="table-shell trajectory-detail-shell">
+                      <table class="analysis-table analysis-table-compact">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Range</th>
+                            <th>Truth (x, y)</th>
+                            <th>Measured (x, y)</th>
+                            <th>Estimated (x, y)</th>
+                            <th>Pos Err</th>
+                            <th>Vel Err</th>
+                          </tr>
+                        </thead>
+                        <tbody id="trajectory-a-detections"></tbody>
+                      </table>
+                    </div>
+                  </section>
+                  <section class="trajectory-track-card">
+                    <div class="trajectory-card-head">
+                      <span class="trajectory-swatch trajectory-swatch-b"></span>
+                      <h4 class="trajectory-card-title">Track B Detection Details</h4>
+                    </div>
+                    <div class="table-shell trajectory-detail-shell">
+                      <table class="analysis-table analysis-table-compact">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Range</th>
+                            <th>Truth (x, y)</th>
+                            <th>Measured (x, y)</th>
+                            <th>Estimated (x, y)</th>
+                            <th>Pos Err</th>
+                            <th>Vel Err</th>
+                          </tr>
+                        </thead>
+                        <tbody id="trajectory-b-detections"></tbody>
+                      </table>
+                    </div>
+                  </section>
+                </div>
               </div>
-              <div class="trajectory-legend">
-                <span><span class="trajectory-key trajectory-key-truth"></span> Truth path</span>
-                <span><span class="trajectory-key trajectory-key-estimate"></span> Estimated path</span>
-                <span><span class="trajectory-key trajectory-key-measure"></span> Measured points</span>
-                <span><span class="trajectory-key trajectory-key-label"></span> Detection index label</span>
-              </div>
-              <p class="analysis-subtle">The trajectory panel uses ego-relative coordinates. Estimated points are shown only at radar update instants, so each estimate is directly comparable to a post-measurement state.</p>
             </div>
-          </div>
-        </article>
-
-        <article class="panel analysis-panel">
-          <div class="section-head">
-            <div>
-              <h2>Filters</h2>
-              <p class="section-caption">Global filters for the tables below.</p>
-            </div>
-          </div>
-          <div class="analysis-filter-grid">
-            <label class="field">
-              <span>Scenario</span>
-              <select id="filter-scenario"></select>
-            </label>
-            <label class="field">
-              <span>Coefficient</span>
-              <select id="filter-coefficient"></select>
-            </label>
-            <label class="field">
-              <span>Object</span>
-              <select id="filter-object"></select>
-            </label>
-            <label class="field">
-              <span>Category</span>
-              <select id="filter-category"></select>
-            </label>
-          </div>
-        </article>
-
-        <article class="panel analysis-panel">
-          <div class="section-head">
-            <div>
-              <h2>Per-Object Analysis</h2>
-              <p class="section-caption">Object-by-object view of tracking quality and detection support.</p>
-            </div>
-          </div>
-          <div class="table-shell">
-            <table class="analysis-table">
-              <thead>
-                <tr>
-                  <th>Object</th>
-                  <th>Category</th>
-                  <th>Coef</th>
-                  <th>Detections</th>
-                  <th>Post-update RMSE Pos</th>
-                  <th>Post-update RMSE Vel</th>
-                  <th>Post-update Mean Pos Err</th>
-                  <th>Post-update Mean Vel Err</th>
-                </tr>
-              </thead>
-              <tbody id="objects-table-body"></tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="panel analysis-panel">
-          <div class="section-head">
-            <div>
-              <h2>Error vs Detection Count</h2>
-              <p class="section-caption">Bucketed by detection index to observe filter convergence.</p>
-            </div>
-          </div>
-          <div class="table-shell">
-            <table class="analysis-table">
-              <thead>
-                <tr>
-                  <th>Coef</th>
-                  <th>Bucket</th>
-                  <th>Samples</th>
-                  <th>Mean Pos Err</th>
-                  <th>Median Pos Err</th>
-                  <th>Mean Vel Err</th>
-                  <th>Mean Range</th>
-                </tr>
-              </thead>
-              <tbody id="trend-detection-body"></tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="panel analysis-panel">
-          <div class="section-head">
-            <div>
-              <h2>Error vs Range</h2>
-              <p class="section-caption">Bucketed by ego-centric range to inspect observability effects.</p>
-            </div>
-          </div>
-          <div class="table-shell">
-            <table class="analysis-table">
-              <thead>
-                <tr>
-                  <th>Coef</th>
-                  <th>Range Bucket</th>
-                  <th>Samples</th>
-                  <th>Mean Pos Err</th>
-                  <th>Median Pos Err</th>
-                  <th>Mean Vel Err</th>
-                  <th>Mean Detect Idx</th>
-                </tr>
-              </thead>
-              <tbody id="trend-range-body"></tbody>
-            </table>
-          </div>
-        </article>
-
-        <article class="panel analysis-panel">
-          <div class="section-head">
-            <div>
-              <h2>Non-Linearity Comparison</h2>
-              <p class="section-caption">Compact comparison of global run-level metrics across coefficients.</p>
-            </div>
-          </div>
-          <div class="table-shell">
-            <table class="analysis-table">
-              <thead>
-                <tr>
-                  <th>Coef</th>
-                  <th>Detections</th>
-                  <th>Post-update Pos RMSE</th>
-                  <th>Post-update Vel RMSE</th>
-                  <th>Mean Pos Err</th>
-                  <th>Mean Vel Err</th>
-                  <th>Mean Range</th>
-                </tr>
-              </thead>
-              <tbody id="trend-coefficient-body"></tbody>
-            </table>
-          </div>
-        </article>
+          </article>
       </section>
     </main>
   </div>
 
-  <script type="module" src="./analysis.js"></script>
+  <script type="module" src="./analysis.js?v=2026-04-22-analysis-ui"></script>
 </body>
 </html>
+

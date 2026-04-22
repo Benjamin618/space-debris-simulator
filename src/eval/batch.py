@@ -4,7 +4,9 @@ import csv
 from dataclasses import dataclass
 from datetime import datetime
 import json
+import math
 from pathlib import Path
+import random
 from statistics import median
 from typing import Any, Iterable
 
@@ -18,6 +20,8 @@ class BatchRunResult:
     base_scenario: str
     variant_name: str
     coefficient: float
+    scan_rate_deg_s: float
+    seed: int
     duration_s: float
     frames: int
     run_dir: Path
@@ -71,15 +75,24 @@ def run_headless_scenario(
     return run_dir, summary
 
 
-def build_uniform_coefficient_config(
+def build_variant_config(
     raw_config: dict[str, object],
     *,
     coefficient: float,
+    scan_rate_deg_s: float | None = None,
+    seed: int | None = None,
 ) -> dict[str, object]:
     coefficient = max(0.0, min(1.0, coefficient))
     config_copy = json.loads(json.dumps(raw_config))
     truth_dynamics = config_copy.setdefault("truth_dynamics", {})
     truth_dynamics["default_coefficient_range"] = [coefficient, coefficient]
+    if scan_rate_deg_s is not None:
+        config_copy.setdefault("radar", {})["scan_rate_deg_s"] = float(scan_rate_deg_s)
+    if seed is not None:
+        config_copy.setdefault("world", {})["seed"] = int(seed)
+        config_copy.setdefault("radar", {})["seed"] = int(seed) + 101
+        truth_dynamics["coefficient_seed"] = int(seed) + 202
+        _randomize_object_positions(config_copy, seed=int(seed))
 
     for obj in config_copy.get("objects", []):
         obj["second_order_coefficient"] = coefficient
@@ -87,10 +100,50 @@ def build_uniform_coefficient_config(
     return config_copy
 
 
+def _randomize_object_positions(config_copy: dict[str, object], *, seed: int) -> None:
+    objects = config_copy.get("objects", [])
+    if not isinstance(objects, list) or not objects:
+        return
+
+    ego_position = config_copy.get("ego", {}).get("position", [0.0, 0.0])
+    ego_x = float(ego_position[0])
+    ego_y = float(ego_position[1])
+    world = config_copy.get("world", {})
+    world_width = float(world.get("width", 1600.0))
+    world_height = float(world.get("height", 900.0))
+    rng = random.Random(seed + 303)
+    placed: list[tuple[float, float]] = []
+
+    category_ranges = {
+        "dangerous_debris": (250.0, 335.0),
+        "collectable_debris": (180.0, 290.0),
+        "neutral_object": (130.0, 230.0),
+    }
+
+    for obj in objects:
+        object_class = str(obj.get("object_class", "neutral_object"))
+        min_radius, max_radius = category_ranges.get(object_class, (160.0, 300.0))
+
+        candidate_x = float(obj.get("position", [ego_x, ego_y])[0])
+        candidate_y = float(obj.get("position", [ego_x, ego_y])[1])
+        for _ in range(32):
+            angle = rng.uniform(0.0, 2.0 * 3.141592653589793)
+            radius = rng.uniform(min_radius, max_radius)
+            candidate_x = (ego_x + radius * math.cos(angle)) % world_width
+            candidate_y = (ego_y + radius * math.sin(angle)) % world_height
+            if all(math.hypot(candidate_x - px, candidate_y - py) >= 110.0 for px, py in placed):
+                break
+
+        obj["position"] = [round(candidate_x, 3), round(candidate_y, 3)]
+        placed.append((candidate_x, candidate_y))
+
+
 def run_batch_analysis(
     *,
     config_paths: list[Path],
     coefficients: list[float],
+    scan_rates_deg_s: list[float] | None,
+    seeds: list[int] | None,
     duration_s: float | None,
     radar_turns: float,
     output_root: Path,
@@ -107,39 +160,55 @@ def run_batch_analysis(
     for config_path in config_paths:
         raw_config = json.loads(config_path.read_text(encoding="utf-8"))
         base_name = config_path.stem
-        scan_rate_deg_s = float(raw_config.get("radar", {}).get("scan_rate_deg_s", 40.8))
-        effective_duration_s = duration_s
-        if effective_duration_s is None:
-            effective_duration_s = (360.0 / scan_rate_deg_s) * radar_turns
         fps = int(raw_config["window"]["fps"])
-        frame_count = max(1, int(round(effective_duration_s * fps)))
+        base_scan_rate_deg_s = float(raw_config.get("radar", {}).get("scan_rate_deg_s", 40.8))
+        effective_scan_rates = scan_rates_deg_s or [base_scan_rate_deg_s]
+        effective_seeds = seeds or [int(raw_config.get("world", {}).get("seed", 1))]
+        slowest_scan_rate_deg_s = min(effective_scan_rates)
+        shared_duration_s = duration_s
+        if shared_duration_s is None:
+            shared_duration_s = (360.0 / slowest_scan_rate_deg_s) * radar_turns
 
-        for coefficient in coefficients:
-            variant_raw = build_uniform_coefficient_config(raw_config, coefficient=coefficient)
-            variant_name = f"{base_name}_coef_{coefficient:0.2f}".replace(".", "_")
-            variant_config_path = configs_dir / f"{variant_name}.json"
-            variant_config_path.write_text(json.dumps(variant_raw, indent=2), encoding="utf-8")
+        for scan_rate_deg_s in effective_scan_rates:
+            effective_duration_s = shared_duration_s
+            frame_count = max(1, int(round(effective_duration_s * fps)))
 
-            config = parse_scenario_config(variant_raw)
-            run_dir, summary = run_headless_scenario(
-                config=config,
-                scenario_name=variant_name,
-                output_root=runs_dir,
-                duration_s=effective_duration_s,
-                config_path=variant_config_path,
-            )
-            results.append(
-                BatchRunResult(
-                    base_scenario=base_name,
-                    variant_name=variant_name,
-                    coefficient=coefficient,
-                    duration_s=effective_duration_s,
-                    frames=frame_count,
-                    run_dir=run_dir,
-                    generated_config_path=variant_config_path,
-                    summary=summary,
-                )
-            )
+            for seed in effective_seeds:
+                for coefficient in coefficients:
+                    variant_raw = build_variant_config(
+                        raw_config,
+                        coefficient=coefficient,
+                        scan_rate_deg_s=scan_rate_deg_s,
+                        seed=seed,
+                    )
+                    variant_name = (
+                        f"{base_name}_coef_{coefficient:0.2f}_scan_{scan_rate_deg_s:0.1f}_seed_{seed}"
+                    ).replace(".", "_")
+                    variant_config_path = configs_dir / f"{variant_name}.json"
+                    variant_config_path.write_text(json.dumps(variant_raw, indent=2), encoding="utf-8")
+
+                    config = parse_scenario_config(variant_raw)
+                    run_dir, summary = run_headless_scenario(
+                        config=config,
+                        scenario_name=variant_name,
+                        output_root=runs_dir,
+                        duration_s=effective_duration_s,
+                        config_path=variant_config_path,
+                    )
+                    results.append(
+                        BatchRunResult(
+                            base_scenario=base_name,
+                            variant_name=variant_name,
+                            coefficient=coefficient,
+                            scan_rate_deg_s=scan_rate_deg_s,
+                            seed=seed,
+                            duration_s=effective_duration_s,
+                            frames=frame_count,
+                            run_dir=run_dir,
+                            generated_config_path=variant_config_path,
+                            summary=summary,
+                        )
+                    )
 
     _write_batch_summary(analysis_dir / "batch_summary.csv", results)
     _write_object_summary(analysis_dir / "object_summary.csv", results)
@@ -156,6 +225,8 @@ def _write_batch_summary(path: Path, results: list[BatchRunResult]) -> None:
         "base_scenario",
         "variant_name",
         "coefficient",
+        "scan_rate_deg_s",
+        "seed",
         "duration_s",
         "frames",
         "max_acceleration",
@@ -181,6 +252,8 @@ def _write_batch_summary(path: Path, results: list[BatchRunResult]) -> None:
                     "base_scenario": result.base_scenario,
                     "variant_name": result.variant_name,
                     "coefficient": f"{result.coefficient:.2f}",
+                    "scan_rate_deg_s": f"{result.scan_rate_deg_s:.2f}",
+                    "seed": result.seed,
                     "duration_s": f"{result.duration_s:.2f}",
                     "frames": result.frames,
                     "max_acceleration": truth_dynamics["max_acceleration"],
@@ -203,6 +276,8 @@ def _write_object_summary(path: Path, results: list[BatchRunResult]) -> None:
         "base_scenario",
         "variant_name",
         "coefficient",
+        "scan_rate_deg_s",
+        "seed",
         "object_name",
         "samples",
         "detection_count",
@@ -224,6 +299,8 @@ def _write_object_summary(path: Path, results: list[BatchRunResult]) -> None:
                         "base_scenario": result.base_scenario,
                         "variant_name": result.variant_name,
                         "coefficient": f"{result.coefficient:.2f}",
+                        "scan_rate_deg_s": f"{result.scan_rate_deg_s:.2f}",
+                        "seed": result.seed,
                         "object_name": object_name,
                         "samples": metrics["samples"],
                         "detection_count": metrics["detection_count"],
@@ -250,6 +327,8 @@ def _write_detections_merged(path: Path, results: list[BatchRunResult]) -> None:
                     "base_scenario",
                     "variant_name",
                     "coefficient",
+                    "scan_rate_deg_s",
+                    "seed",
                     "duration_s",
                     "frames",
                     *reader.fieldnames,
@@ -260,6 +339,8 @@ def _write_detections_merged(path: Path, results: list[BatchRunResult]) -> None:
                         "base_scenario": result.base_scenario,
                         "variant_name": result.variant_name,
                         "coefficient": f"{result.coefficient:.2f}",
+                        "scan_rate_deg_s": f"{result.scan_rate_deg_s:.2f}",
+                        "seed": result.seed,
                         "duration_s": f"{result.duration_s:.2f}",
                         "frames": result.frames,
                         **row,
@@ -267,7 +348,15 @@ def _write_detections_merged(path: Path, results: list[BatchRunResult]) -> None:
                 )
 
     if fieldnames is None:
-        fieldnames = ["base_scenario", "variant_name", "coefficient", "duration_s", "frames"]
+        fieldnames = [
+            "base_scenario",
+            "variant_name",
+            "coefficient",
+            "scan_rate_deg_s",
+            "seed",
+            "duration_s",
+            "frames",
+        ]
 
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -282,13 +371,15 @@ def _write_comparison_json(path: Path, results: list[BatchRunResult]) -> None:
             {
                 "variant_name": result.variant_name,
                 "coefficient": result.coefficient,
+                "scan_rate_deg_s": result.scan_rate_deg_s,
+                "seed": result.seed,
                 "run_dir": str(result.run_dir),
                 "generated_config_path": str(result.generated_config_path),
                 "summary": result.summary,
             }
         )
     for items in grouped.values():
-        items.sort(key=lambda item: float(item["coefficient"]))
+        items.sort(key=lambda item: (float(item["coefficient"]), float(item["scan_rate_deg_s"]), int(item["seed"])))
     path.write_text(json.dumps(grouped, indent=2), encoding="utf-8")
 
 
@@ -305,16 +396,18 @@ def _write_analysis_report(path: Path, results: list[BatchRunResult]) -> None:
     ]
 
     for base_scenario, scenario_results in sorted(grouped.items()):
-        scenario_results.sort(key=lambda item: item.coefficient)
+        scenario_results.sort(key=lambda item: (item.coefficient, item.scan_rate_deg_s, item.seed))
         lines.append(f"## {base_scenario}")
         lines.append("")
-        lines.append("| Coefficient | Mean position RMSE | Mean velocity RMSE | Total detections | Tracked objects |")
-        lines.append("| --- | ---: | ---: | ---: | ---: |")
+        lines.append("| Coefficient | Scan rate | Seed | Mean position RMSE | Mean velocity RMSE | Total detections | Tracked objects |")
+        lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
         for result in scenario_results:
             metrics = result.summary["metrics"]
             lines.append(
                 "| "
                 f"{result.coefficient:.2f} | "
+                f"{result.scan_rate_deg_s:.1f} | "
+                f"{result.seed:d} | "
                 f"{metrics['mean_position_rmse']:.3f} | "
                 f"{metrics['mean_velocity_rmse']:.3f} | "
                 f"{metrics['total_detections']} | "
@@ -332,12 +425,12 @@ def _write_analysis_report(path: Path, results: list[BatchRunResult]) -> None:
                 if baseline_rmse > 0:
                     ratio = current_rmse / baseline_rmse
                     lines.append(
-                        f"- `coef={result.coefficient:.2f}` -> position RMSE `{current_rmse:.3f}` "
+                        f"- `coef={result.coefficient:.2f}`, `scan={result.scan_rate_deg_s:.1f} deg/s`, `seed={result.seed}` -> position RMSE `{current_rmse:.3f}` "
                         f"({ratio:.2f}x baseline)"
                     )
                 else:
                     lines.append(
-                        f"- `coef={result.coefficient:.2f}` -> position RMSE `{current_rmse:.3f}`"
+                        f"- `coef={result.coefficient:.2f}`, `scan={result.scan_rate_deg_s:.1f} deg/s`, `seed={result.seed}` -> position RMSE `{current_rmse:.3f}`"
                     )
             lines.append("")
 
@@ -346,11 +439,11 @@ def _write_analysis_report(path: Path, results: list[BatchRunResult]) -> None:
         lines.append("### Key observation")
         lines.append("")
         lines.append(
-            f"- Lowest mean position RMSE: `{best.coefficient:.2f}` -> "
+            f"- Lowest mean position RMSE: `coef={best.coefficient:.2f}`, `scan={best.scan_rate_deg_s:.1f}`, `seed={best.seed}` -> "
             f"`{float(best.summary['metrics']['mean_position_rmse']):.3f}`"
         )
         lines.append(
-            f"- Highest mean position RMSE: `{worst.coefficient:.2f}` -> "
+            f"- Highest mean position RMSE: `coef={worst.coefficient:.2f}`, `scan={worst.scan_rate_deg_s:.1f}`, `seed={worst.seed}` -> "
             f"`{float(worst.summary['metrics']['mean_position_rmse']):.3f}`"
         )
         lines.append("")
@@ -395,6 +488,8 @@ def _write_analysis_v1_bundle(path: Path, results: list[BatchRunResult]) -> None
         "filters": {
             "base_scenarios": sorted({result.base_scenario for result in results}),
             "coefficients": sorted({round(result.coefficient, 6) for result in results}),
+            "scan_rates_deg_s": sorted({round(result.scan_rate_deg_s, 6) for result in results}),
+            "seeds": sorted({int(result.seed) for result in results}),
             "object_names": sorted({row["object_name"] for row in objects}),
             "true_categories": sorted({row["true_category"] for row in objects}),
         },
@@ -455,30 +550,32 @@ def _build_analysis_overview(results: list[BatchRunResult]) -> dict[str, Any]:
                 "key": "mean_post_update_position_rmse",
                 "label": "Post-update Position RMSE",
                 "value": _round(mean_post_update_position_rmse),
-                "unit": "px",
+                "unit": "m",
             },
             {
                 "key": "mean_post_update_velocity_rmse",
                 "label": "Post-update Velocity RMSE",
                 "value": _round(mean_post_update_velocity_rmse),
-                "unit": "px/s",
+                "unit": "m/s",
             },
             {
                 "key": "mean_post_update_position_rmse_after_init",
                 "label": f"Position RMSE ({INIT_SKIP_DETECTIONS}+)",
                 "value": _round(mean_post_update_position_rmse_after_init),
-                "unit": "px",
+                "unit": "m",
             },
             {
                 "key": "mean_post_update_velocity_rmse_after_init",
                 "label": f"Velocity RMSE ({INIT_SKIP_DETECTIONS}+)",
                 "value": _round(mean_post_update_velocity_rmse_after_init),
-                "unit": "px/s",
+                "unit": "m/s",
             },
         ],
         "experiment": {
             "base_scenarios": sorted({result.base_scenario for result in results}),
             "coefficients": sorted({round(result.coefficient, 6) for result in results}),
+            "scan_rates_deg_s": sorted({round(result.scan_rate_deg_s, 6) for result in results}),
+            "seeds": sorted({int(result.seed) for result in results}),
             "durations_s": sorted({round(duration, 6) for duration in durations}),
             "total_detections": total_detections,
             "total_samples": total_samples,
@@ -496,7 +593,7 @@ def _build_analysis_overview(results: list[BatchRunResult]) -> dict[str, Any]:
 
 def _build_run_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient)):
+    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient, item.scan_rate_deg_s, item.seed)):
         metrics = result.summary["metrics"]
         truth_dynamics = result.summary["truth_dynamics"]
         detection_stats = _build_detection_stats_for_run(result)
@@ -505,6 +602,8 @@ def _build_run_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
                 "base_scenario": result.base_scenario,
                 "variant_name": result.variant_name,
                 "coefficient": _round(result.coefficient),
+                "scan_rate_deg_s": _round(result.scan_rate_deg_s),
+                "seed": int(result.seed),
                 "duration_s": _round(result.duration_s),
                 "frames": result.frames,
                 "max_acceleration": _round(float(truth_dynamics["max_acceleration"])),
@@ -535,7 +634,7 @@ def _build_run_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
 
 def _build_object_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient)):
+    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient, item.scan_rate_deg_s, item.seed)):
         object_meta = {
             entry["name"]: entry for entry in result.summary.get("objects", [])
         }
@@ -549,6 +648,8 @@ def _build_object_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
                     "base_scenario": result.base_scenario,
                     "variant_name": result.variant_name,
                     "coefficient": _round(result.coefficient),
+                    "scan_rate_deg_s": _round(result.scan_rate_deg_s),
+                    "seed": int(result.seed),
                     "object_name": object_name,
                     "true_category": meta.get("true_category", ""),
                     "second_order_coefficient": _round(
@@ -578,15 +679,17 @@ def _build_object_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
 
 
 def _build_detection_index_trend_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
-    groups: dict[tuple[str, float, str], dict[str, Any]] = {}
+    groups: dict[tuple[str, float, float, int, str], dict[str, Any]] = {}
     for result, row in _iter_detection_rows(results):
         bucket_label = _bucket_detection_index(int(row["object_detection_index"]))
-        key = (result.base_scenario, result.coefficient, bucket_label)
+        key = (result.base_scenario, result.coefficient, result.scan_rate_deg_s, result.seed, bucket_label)
         group = groups.setdefault(
             key,
             {
                 "base_scenario": result.base_scenario,
                 "coefficient": result.coefficient,
+                "scan_rate_deg_s": result.scan_rate_deg_s,
+                "seed": result.seed,
                 "bucket_label": bucket_label,
                 "sample_count": 0,
                 "position_errors": [],
@@ -602,15 +705,17 @@ def _build_detection_index_trend_rows(results: list[BatchRunResult]) -> list[dic
 
 
 def _build_range_trend_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
-    groups: dict[tuple[str, float, str], dict[str, Any]] = {}
+    groups: dict[tuple[str, float, float, int, str], dict[str, Any]] = {}
     for result, row in _iter_detection_rows(results):
         bucket_label = _bucket_range(float(row["truth_range"]))
-        key = (result.base_scenario, result.coefficient, bucket_label)
+        key = (result.base_scenario, result.coefficient, result.scan_rate_deg_s, result.seed, bucket_label)
         group = groups.setdefault(
             key,
             {
                 "base_scenario": result.base_scenario,
                 "coefficient": result.coefficient,
+                "scan_rate_deg_s": result.scan_rate_deg_s,
+                "seed": result.seed,
                 "bucket_label": bucket_label,
                 "sample_count": 0,
                 "position_errors": [],
@@ -626,11 +731,15 @@ def _build_range_trend_rows(results: list[BatchRunResult]) -> list[dict[str, Any
         group["truth_ranges"].append(float(row["truth_range"]))
 
     rows: list[dict[str, Any]] = []
-    for group in sorted(groups.values(), key=lambda item: (item["base_scenario"], item["coefficient"], _range_bucket_index(item["bucket_label"]))):
+    for group in sorted(
+        groups.values(),
+        key=lambda item: (item["base_scenario"], item["coefficient"], item["scan_rate_deg_s"], item["seed"], _range_bucket_index(item["bucket_label"]))):
         rows.append(
             {
                 "base_scenario": group["base_scenario"],
                 "coefficient": _round(float(group["coefficient"])),
+                "scan_rate_deg_s": _round(float(group["scan_rate_deg_s"])),
+                "seed": int(group["seed"]),
                 "bucket_label": group["bucket_label"],
                 "sample_count": int(group["sample_count"]),
                 "mean_position_error": _round(_mean(group["position_errors"])),
@@ -645,9 +754,9 @@ def _build_range_trend_rows(results: list[BatchRunResult]) -> list[dict[str, Any
 
 
 def _build_coefficient_trend_rows(results: list[BatchRunResult]) -> list[dict[str, Any]]:
-    detection_groups: dict[tuple[str, float], dict[str, Any]] = {}
+    detection_groups: dict[tuple[str, float, float, int], dict[str, Any]] = {}
     for result, row in _iter_detection_rows(results):
-        key = (result.base_scenario, result.coefficient)
+        key = (result.base_scenario, result.coefficient, result.scan_rate_deg_s, result.seed)
         group = detection_groups.setdefault(
             key,
             {
@@ -666,14 +775,16 @@ def _build_coefficient_trend_rows(results: list[BatchRunResult]) -> list[dict[st
         group["truth_ranges"].append(float(row["truth_range"]))
 
     rows: list[dict[str, Any]] = []
-    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient)):
+    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient, item.scan_rate_deg_s, item.seed)):
         metrics = result.summary["metrics"]
-        detection_group = detection_groups.get((result.base_scenario, result.coefficient), {})
+        detection_group = detection_groups.get((result.base_scenario, result.coefficient, result.scan_rate_deg_s, result.seed), {})
         rows.append(
             {
                 "base_scenario": result.base_scenario,
                 "variant_name": result.variant_name,
                 "coefficient": _round(result.coefficient),
+                "scan_rate_deg_s": _round(result.scan_rate_deg_s),
+                "seed": int(result.seed),
                 "max_acceleration": _round(float(result.summary["truth_dynamics"]["max_acceleration"])),
                 "angular_rate": _round(float(result.summary["truth_dynamics"]["angular_rate"])),
                 "tracked_object_count": int(metrics["tracked_object_count"]),
@@ -700,7 +811,7 @@ def _build_coefficient_trend_rows(results: list[BatchRunResult]) -> list[dict[st
 
 def _build_object_trajectories(results: list[BatchRunResult]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient)):
+    for result in sorted(results, key=lambda item: (item.base_scenario, item.coefficient, item.scan_rate_deg_s, item.seed)):
         truth_by_object: dict[str, list[dict[str, float]]] = {}
         truth_path = result.run_dir / "truth.csv"
         with truth_path.open("r", encoding="utf-8", newline="") as handle:
@@ -772,6 +883,8 @@ def _build_object_trajectories(results: list[BatchRunResult]) -> list[dict[str, 
                     "base_scenario": result.base_scenario,
                     "variant_name": result.variant_name,
                     "coefficient": _round(result.coefficient),
+                    "scan_rate_deg_s": _round(result.scan_rate_deg_s),
+                    "seed": int(result.seed),
                     "object_name": object_name,
                     "true_category": meta.get("true_category", ""),
                     "second_order_coefficient": _round(
@@ -795,12 +908,20 @@ def _finalize_detection_trend_rows(groups: Iterable[dict[str, Any]]) -> list[dic
     rows: list[dict[str, Any]] = []
     for group in sorted(
         groups,
-        key=lambda item: (item["base_scenario"], item["coefficient"], _detection_bucket_index(item["bucket_label"])),
+        key=lambda item: (
+            item["base_scenario"],
+            item["coefficient"],
+            item["scan_rate_deg_s"],
+            item["seed"],
+            _detection_bucket_index(item["bucket_label"]),
+        ),
     ):
         rows.append(
             {
                 "base_scenario": group["base_scenario"],
                 "coefficient": _round(float(group["coefficient"])),
+                "scan_rate_deg_s": _round(float(group["scan_rate_deg_s"])),
+                "seed": int(group["seed"]),
                 "bucket_label": group["bucket_label"],
                 "sample_count": int(group["sample_count"]),
                 "mean_position_error": _round(_mean(group["position_errors"])),

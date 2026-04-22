@@ -82,6 +82,9 @@ class SimulationApp:
         self.detection_log: list[DetectionLogEntry] = []
         self.radar_truth_echoes: dict[str, RadarTruthEcho] = {}
         self.selected_track_name: str | None = None
+        self.distance_unit = "m"
+        self.speed_unit = "m/s"
+        self.acceleration_unit = "m/s²"
 
     def run(self, max_frames: int | None = None) -> int:
         pygame.init()
@@ -102,10 +105,11 @@ class SimulationApp:
         running = True
         while running:
             dt = self.clock.tick(self.config.window.fps) / 1000.0
+            sim_dt = dt * self.config.world.time_scale
             running = self._handle_events()
             if not self.is_paused:
-                self.world.update(dt)
-                self._ingest_radar_state(dt)
+                self.world.update(sim_dt)
+                self._ingest_radar_state(sim_dt)
 
             assert self.screen is not None
             self._draw(self.screen)
@@ -842,10 +846,10 @@ class SimulationApp:
             f"Track status      {selected_track.track_status}",
             f"Accel level       {accel_level:0.2f}",
             f"Detection count   {int(metrics.get('detection_count', 0)):d}",
-            f"Current range     {truth_range:0.1f}",
-            f"Time since update {selected_track.time_since_update:0.2f}",
-            f"RMSE position     {float(metrics.get('position_rmse', 0.0)):0.3f}",
-            f"RMSE speed        {float(metrics.get('velocity_rmse', 0.0)):0.3f}",
+            f"Current range     {truth_range:0.1f} {self.distance_unit}",
+            f"Time since update {selected_track.time_since_update:0.2f} s",
+            f"RMSE position     {float(metrics.get('position_rmse', 0.0)):0.3f} {self.distance_unit}",
+            f"RMSE speed        {float(metrics.get('velocity_rmse', 0.0)):0.3f} {self.speed_unit}",
         ]
         for line in detail_lines:
             text = self.small_font.render(line, True, TEXT_PRIMARY if "RMSE" in line or "Track status" in line else TEXT_MUTED)
@@ -870,6 +874,7 @@ class SimulationApp:
             f"Status   {status}",
             f"Time     {self.world.sim_time:5.1f}s",
             f"FPS      {fps:5.1f}",
+            f"Rate     x{self.config.world.time_scale:4.1f}",
             f"Objects  {len(self.world.all_objects):5d}",
             f"Tracked  {int(summary.get('tracked_object_count', 0)):5d}",
             f"Detect   {int(summary.get('total_detections', 0)):5d}",
@@ -878,14 +883,15 @@ class SimulationApp:
             lines.extend(
                 [
                     f"Beam     {self.world.radar_sensor.scan_angle_deg:5.1f}",
-                    f"Width    {self.world.radar_sensor.config.beam_width_deg:5.1f}",
+                    f"Width    {self.world.radar_sensor.config.beam_width_deg:5.1f}°",
                     f"Hits     {self.world.radar_sensor.last_detection_count:5d}",
+                    f"Range    {self.world.radar_sensor.config.max_range:5.0f} {self.distance_unit}",
                 ]
             )
         if self.world.truth_dynamics is not None:
             lines.extend(
                 [
-                    f"Max acc  {self.world.truth_dynamics.max_acceleration:5.2f}",
+                    f"Max acc  {self.world.truth_dynamics.max_acceleration:5.4f} {self.acceleration_unit}",
                     f"Coeff rg {self.world.truth_dynamics.default_coefficient_range[0]:0.2f}-{self.world.truth_dynamics.default_coefficient_range[1]:0.2f}",
                 ]
             )

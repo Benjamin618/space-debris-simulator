@@ -3,43 +3,43 @@
     {
       "key": "runs_compared",
       "label": "Runs Compared",
-      "value": 4,
+      "value": 120,
       "unit": "runs"
     },
     {
       "key": "total_detections",
       "label": "Total Detections",
-      "value": 326,
+      "value": 3377,
       "unit": "detections"
     },
     {
       "key": "mean_post_update_position_rmse",
       "label": "Post-update Position RMSE",
-      "value": 13.763602,
-      "unit": "px"
+      "value": 10.10039,
+      "unit": "m"
     },
     {
       "key": "mean_post_update_velocity_rmse",
       "label": "Post-update Velocity RMSE",
-      "value": 2.358363,
-      "unit": "px/s"
+      "value": 1.548947,
+      "unit": "m/s"
     },
     {
       "key": "mean_post_update_position_rmse_after_init",
       "label": "Position RMSE (5+)",
-      "value": 11.467584,
-      "unit": "px"
+      "value": 8.862789,
+      "unit": "m"
     },
     {
       "key": "mean_post_update_velocity_rmse_after_init",
       "label": "Velocity RMSE (5+)",
-      "value": 1.202856,
-      "unit": "px/s"
+      "value": 0.453856,
+      "unit": "m/s"
     }
   ],
   "experiment": {
     "base_scenarios": [
-      "scenario_analysis_dense"
+      "scenario_analysis_minimal"
     ],
     "coefficients": [
       0.0,
@@ -47,13 +47,30 @@
       0.5,
       0.75
     ],
-    "durations_s": [
-      88.235294
+    "scan_rates_deg_s": [
+      30.0,
+      40.8,
+      50.0
     ],
-    "total_detections": 326,
-    "total_samples": 170359,
-    "tracking_mean_position_rmse": 38.479228,
-    "tracking_mean_velocity_rmse": 2.512563,
+    "seeds": [
+      11,
+      23,
+      41,
+      57,
+      77,
+      91,
+      103,
+      121,
+      149,
+      173
+    ],
+    "durations_s": [
+      120.0
+    ],
+    "total_detections": 3377,
+    "total_samples": 2484915,
+    "tracking_mean_position_rmse": 151.562652,
+    "tracking_mean_velocity_rmse": 1.589838,
     "post_update_rmse_after_init_skip": 5
   },
   "notes": [

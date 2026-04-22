@@ -25,6 +25,7 @@ class WorldConfig:
     grid_spacing: float
     star_count: int
     seed: int
+    time_scale: float
 
 
 @dataclass(slots=True)
@@ -155,6 +156,7 @@ def parse_scenario_config(raw: dict[str, object]) -> ScenarioConfig:
             grid_spacing=float(raw["world"]["grid_spacing"]),
             star_count=int(raw["world"]["star_count"]),
             seed=int(raw["world"]["seed"]),
+            time_scale=max(0.1, float(raw["world"].get("time_scale", 1.0))),
         ),
         ui=UIConfig(
             show_grid=bool(raw["ui"]["show_grid"]),

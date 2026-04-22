@@ -339,12 +339,20 @@ select {
 
 .analysis-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
   gap: 12px;
 }
 
 .analysis-panel-wide {
   grid-column: 1 / -1;
+}
+
+.analysis-panel-overview {
+  grid-column: 1;
+}
+
+.analysis-panel-run-list {
+  grid-column: 2;
 }
 
 .topbar-analysis {
@@ -451,9 +459,46 @@ select {
 
 .analysis-filter-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-top: 6px;
+}
+
+.guided-observation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.guided-observation-card {
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--bg-card);
+  border: 1px solid rgba(122, 154, 219, 0.16);
+}
+
+.guided-observation-card h3 {
+  margin: 0 0 8px;
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  font-size: 0.84rem;
+}
+
+.guided-observation-value {
+  margin: 0 0 6px;
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  font-size: 1.22rem;
+}
+
+.guided-observation-body {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.guided-observation-notes {
+  margin-top: 12px;
 }
 
 .section-head {
@@ -462,6 +507,22 @@ select {
   align-items: flex-end;
   gap: 12px;
   margin-bottom: 10px;
+}
+
+.run-table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.field-compact {
+  min-width: 148px;
+}
+
+.run-filter-field {
+  min-width: 260px;
+  flex: 1 1 260px;
 }
 
 .section-caption {
@@ -476,7 +537,7 @@ select {
 
 .trajectory-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  grid-template-columns: 1fr;
   gap: 14px;
   align-items: start;
 }
@@ -505,19 +566,26 @@ select {
 
 .trajectory-controls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
   margin-bottom: 12px;
 }
 
 .trajectory-control-group {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
 .trajectory-track-cards {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.trajectory-detection-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -625,6 +693,76 @@ select {
   background: rgba(122, 154, 219, 0.08);
 }
 
+.analysis-table-compact {
+  min-width: 720px;
+}
+
+.analysis-table-compact th,
+.analysis-table-compact td {
+  padding: 7px 8px;
+  font-size: 0.74rem;
+}
+
+.analysis-table-compact th {
+  font-size: 0.62rem;
+}
+
+.trajectory-detail-shell {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.run-list-shell {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(10, 18, 34, 0.72);
+  border: 1px solid rgba(122, 154, 219, 0.16);
+}
+
+.run-list-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.run-list {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.run-list-item {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(6, 12, 24, 0.88);
+  border: 1px solid rgba(122, 154, 219, 0.14);
+  color: var(--text-primary);
+}
+
+.run-list-item:hover {
+  background: rgba(122, 154, 219, 0.08);
+  border-color: rgba(122, 154, 219, 0.22);
+}
+
+.run-list-title {
+  font-size: 0.83rem;
+  font-weight: 600;
+}
+
+.run-list-meta,
+.run-list-metrics {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
 .metric-pill {
   display: inline-flex;
   align-items: center;
@@ -683,6 +821,17 @@ select {
   color: var(--accent);
   font-size: 1rem;
   line-height: 1;
+}
+
+.accordion-meta {
+  color: var(--text-muted);
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.run-comparison-accordion {
+  margin-top: 8px;
 }
 
 .accordion[open] summary::after {
@@ -809,6 +958,11 @@ kbd {
     grid-template-columns: 1fr;
   }
 
+  .analysis-panel-overview,
+  .analysis-panel-run-list {
+    grid-column: auto;
+  }
+
   .summary-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -821,6 +975,10 @@ kbd {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .guided-observation-grid {
+    grid-template-columns: 1fr;
+  }
+
   .trajectory-layout {
     grid-template-columns: 1fr;
   }
@@ -830,7 +988,19 @@ kbd {
   }
 
   .trajectory-control-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trajectory-track-cards {
     grid-template-columns: 1fr;
+  }
+
+  .trajectory-detection-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .run-table-toolbar {
+    width: 100%;
   }
 }
 
