@@ -3,37 +3,37 @@
     {
       "key": "runs_compared",
       "label": "Runs Compared",
-      "value": 120,
+      "value": 81,
       "unit": "runs"
     },
     {
       "key": "total_detections",
       "label": "Total Detections",
-      "value": 3377,
+      "value": 4473,
       "unit": "detections"
     },
     {
       "key": "mean_post_update_position_rmse",
       "label": "Post-update Position RMSE",
-      "value": 10.10039,
+      "value": 13.520219,
       "unit": "m"
     },
     {
       "key": "mean_post_update_velocity_rmse",
       "label": "Post-update Velocity RMSE",
-      "value": 1.548947,
+      "value": 1.28508,
       "unit": "m/s"
     },
     {
       "key": "mean_post_update_position_rmse_after_init",
       "label": "Position RMSE (5+)",
-      "value": 8.862789,
+      "value": 13.862467,
       "unit": "m"
     },
     {
       "key": "mean_post_update_velocity_rmse_after_init",
       "label": "Velocity RMSE (5+)",
-      "value": 0.453856,
+      "value": 0.753274,
       "unit": "m/s"
     }
   ],
@@ -43,34 +43,41 @@
     ],
     "coefficients": [
       0.0,
-      0.25,
       0.5,
-      0.75
+      1.0
     ],
     "scan_rates_deg_s": [
-      30.0,
-      40.8,
-      50.0
+      20.0,
+      40.0,
+      80.0
+    ],
+    "bearing_noise_factors": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "range_noise_std": [
+      3.75,
+      7.5,
+      15.0
+    ],
+    "bearing_noise_std_deg": [
+      1.2,
+      2.4,
+      4.8
     ],
     "seeds": [
-      11,
-      23,
-      41,
-      57,
-      77,
-      91,
-      103,
-      121,
-      149,
-      173
+      17,
+      89,
+      143
     ],
     "durations_s": [
-      120.0
+      144.0
     ],
-    "total_detections": 3377,
-    "total_samples": 2484915,
-    "tracking_mean_position_rmse": 151.562652,
-    "tracking_mean_velocity_rmse": 1.589838,
+    "total_detections": 4473,
+    "total_samples": 2039865,
+    "tracking_mean_position_rmse": 18.973331,
+    "tracking_mean_velocity_rmse": 1.336258,
     "post_update_rmse_after_init_skip": 5
   },
   "notes": [

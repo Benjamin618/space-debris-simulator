@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Debris Simulator - Key Results</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=2026-04-24-intro-v1">
+</head>
+<body>
+  <div class="analysis-shell results-shell">
+    <header class="analysis-header panel">
+      <div class="topbar topbar-analysis">
+        <div class="topbar-title">
+          <p class="eyebrow">Key Results V1</p>
+          <h1>What This Batch Shows</h1>
+          <nav class="page-nav" aria-label="Application pages">
+            <a class="page-nav-link" href="./intro.html">Intro</a>
+            <a class="page-nav-link" href="./index.html">Live Demo</a>
+            <a class="page-nav-link" href="./analysis.html">Analysis</a>
+            <a class="page-nav-link page-nav-link-active" href="./results.html">Results</a>
+          </nav>
+        </div>
+        <div class="analysis-intro">
+          <p class="analysis-lead">
+            This page turns the current validation batch into a short external-facing reading: what improved, what degraded, and what matters most for a LEO proximity tracking demo.
+          </p>
+          <p class="analysis-subtle">
+            It is intentionally shorter than the Analysis page. The goal is to land on a few defensible conclusions, not to expose every table.
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <main class="analysis-main">
+      <section class="results-grid">
+        <article class="panel results-panel results-panel-hero">
+          <div id="results-summary-cards" class="summary-card-grid results-hero-cards"></div>
+          <div class="results-hero-layout">
+            <div>
+              <h2>Executive Read</h2>
+              <p class="results-lead">
+                In this dataset, the tracker behaves as expected: repeated radar updates stabilize the estimate, stronger unmodeled acceleration hurts performance, and both revisit rate and measurement precision materially change the tracking error.
+              </p>
+              <p class="results-subtle">
+                The most useful reading is not "the tracker is good" in absolute terms, but rather "the tracker is good under some sensing and motion conditions, and degrades predictably when those conditions worsen."
+              </p>
+            </div>
+            <div class="results-cta">
+              <a class="button button-primary" href="./analysis.html">Open Analysis</a>
+              <a class="button" href="./index.html">Open Live Demo</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel results-panel results-panel-findings">
+          <div class="section-head">
+            <div>
+              <h2>Key Findings</h2>
+              <p class="section-caption">Five claims supported directly by the current batch.</p>
+            </div>
+          </div>
+          <div id="results-findings-grid" class="results-findings-grid"></div>
+        </article>
+
+        <article class="panel results-panel">
+          <div class="section-head">
+            <div>
+              <h2>Experiment Scope</h2>
+              <p class="section-caption">The current batch configuration that underpins the findings.</p>
+            </div>
+          </div>
+          <dl id="results-experiment-list" class="summary-list"></dl>
+        </article>
+
+        <article class="panel results-panel">
+          <div class="section-head">
+            <div>
+              <h2>Best and Worst Runs</h2>
+              <p class="section-caption">Useful anchors for explaining what "easy" and "stress" conditions look like.</p>
+            </div>
+          </div>
+          <div id="results-extremes" class="results-extremes"></div>
+        </article>
+
+        <article class="panel results-panel results-panel-wide">
+          <div class="section-head">
+            <div>
+              <h2>How To Read This</h2>
+              <p class="section-caption">A short bridge between the demo, the analysis page, and later conclusions.</p>
+            </div>
+          </div>
+          <div class="results-reading-grid">
+            <div class="results-reading-card">
+              <h3>What this is</h3>
+              <p>
+                A compact interpretation layer over the same batch consumed by <a href="./analysis.html">Analysis</a>. It is the place where an external reader should understand the main engineering message without opening tables.
+              </p>
+            </div>
+            <div class="results-reading-card">
+              <h3>What this is not</h3>
+              <p>
+                It is not a proof of orbital realism or a flight-qualified tracker. It is a controlled sandbox showing how a first-order Kalman tracker reacts to sensing cadence, sensing noise, and bounded second-order truth dynamics.
+              </p>
+            </div>
+            <div class="results-reading-card">
+              <h3>What to inspect next</h3>
+              <p>
+                Use the <a href="./analysis.html">Analysis</a> page to inspect best and worst tracks, compare two conditions directly, and verify that the summarized statements here remain visible at track level.
+              </p>
+            </div>
+          </div>
+          <ul id="results-notes" class="analysis-list"></ul>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./results.js?v=2026-04-24-results-v3"></script>
+</body>
+</html>

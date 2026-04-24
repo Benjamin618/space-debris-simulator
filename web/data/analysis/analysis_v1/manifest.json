@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-04-22T11:21:34",
+  "generated_at": "2026-04-23T11:46:20",
   "post_update_rmse_after_init_skip": 5,
   "truth_path_sample_seconds": 0.25,
   "questions": [
@@ -14,26 +14,33 @@
     ],
     "coefficients": [
       0.0,
-      0.25,
       0.5,
-      0.75
+      1.0
     ],
     "scan_rates_deg_s": [
-      30.0,
-      40.8,
-      50.0
+      20.0,
+      40.0,
+      80.0
+    ],
+    "bearing_noise_factors": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "range_noise_std": [
+      3.75,
+      7.5,
+      15.0
+    ],
+    "bearing_noise_std_deg": [
+      1.2,
+      2.4,
+      4.8
     ],
     "seeds": [
-      11,
-      23,
-      41,
-      57,
-      77,
-      91,
-      103,
-      121,
-      149,
-      173
+      17,
+      89,
+      143
     ],
     "object_names": [
       "COL-A",

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Debris Simulator - Introduction</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css?v=2026-04-24-intro-v1">
+</head>
+<body>
+  <div class="analysis-shell intro-shell">
+    <header class="analysis-header panel">
+      <div class="topbar topbar-analysis">
+        <div class="topbar-title">
+          <p class="eyebrow">Project Introduction</p>
+          <h1>Why This Sandbox Exists</h1>
+          <nav class="page-nav" aria-label="Application pages">
+            <a class="page-nav-link page-nav-link-active" href="./intro.html">Intro</a>
+            <a class="page-nav-link" href="./index.html">Live Demo</a>
+            <a class="page-nav-link" href="./analysis.html">Analysis</a>
+            <a class="page-nav-link" href="./results.html">Results</a>
+          </nav>
+        </div>
+        <div class="analysis-intro">
+          <p class="analysis-lead">
+            This application is a compact engineering sandbox for LEO proximity tracking: a radar observes nearby debris, a Kalman tracker estimates their motion, and the web app shows both the live behavior and the batch evidence behind the conclusions.
+          </p>
+          <p class="analysis-subtle">
+            The goal is not to reproduce orbital mechanics perfectly. The goal is to make sensing, tracking, and estimator mismatch visible enough that an external reader can understand the trade-offs.
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <main class="analysis-main">
+      <section class="intro-grid">
+        <article class="panel intro-panel intro-panel-hero">
+          <div class="intro-hero-layout">
+            <div>
+              <h2>Scenario in One Minute</h2>
+              <p class="intro-lead">
+                Imagine a servicing or debris-collection spacecraft already in proximity operations, not searching all of LEO at large scale. It uses a local radar to repeatedly scan a small neighborhood, detect objects, and maintain tracks good enough to support decisions.
+              </p>
+              <p class="intro-subtle">
+                In the sandbox, truth motion is bounded second-order, while the estimator stays first-order constant velocity. That deliberate mismatch is what makes the batch interesting: it shows when the tracker remains usable and when it starts to drift.
+              </p>
+            </div>
+            <div class="intro-actions">
+              <a class="button button-primary" href="./index.html">Open Live Demo</a>
+              <a class="button" href="./analysis.html">Open Analysis</a>
+            </div>
+          </div>
+          <div class="summary-card-grid intro-summary-grid">
+            <article class="summary-card">
+              <p class="summary-card-label">Operational Setting</p>
+              <p class="summary-card-value">LEO proximity</p>
+              <p class="summary-card-unit">local sensing, not global surveillance</p>
+            </article>
+            <article class="summary-card">
+              <p class="summary-card-label">Sensor</p>
+              <p class="summary-card-value">Scanning radar</p>
+              <p class="summary-card-unit">range + bearing + revisit cadence</p>
+            </article>
+            <article class="summary-card">
+              <p class="summary-card-label">Estimator</p>
+              <p class="summary-card-value">Kalman CV</p>
+              <p class="summary-card-unit">first-order constant velocity</p>
+            </article>
+            <article class="summary-card">
+              <p class="summary-card-label">Question</p>
+              <p class="summary-card-value">When does it hold?</p>
+              <p class="summary-card-unit">and when does it degrade?</p>
+            </article>
+          </div>
+        </article>
+
+        <article class="panel intro-panel">
+          <div class="section-head">
+            <div>
+              <h2>What The Live Demo Shows</h2>
+              <p class="section-caption">A visual intuition layer before the analysis tables and results.</p>
+            </div>
+          </div>
+          <div class="intro-card-grid">
+            <section class="intro-card">
+              <h3>True world view</h3>
+              <p>The left view shows the simulated truth state. It is analyst-facing only, so that a viewer can compare what is really happening with what the radar and tracker manage to reconstruct.</p>
+            </section>
+            <section class="intro-card">
+              <h3>Radar sensing view</h3>
+              <p>The radar view is ego-centric. Measurements are noisy and only appear when the rotating beam revisits an object inside the accessible sensing geometry.</p>
+            </section>
+            <section class="intro-card">
+              <h3>Estimated tracks</h3>
+              <p>The tracker fuses repeated radar updates into an estimated state. When revisit is fast and motion stays close to constant velocity, the estimate remains tight; otherwise it starts to lag or drift.</p>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel intro-panel">
+          <div class="section-head">
+            <div>
+              <h2>Core Concepts</h2>
+              <p class="section-caption">The minimum concepts needed to understand the app without reading code.</p>
+            </div>
+          </div>
+          <div class="intro-card-grid">
+            <section class="intro-card">
+              <h3>Radar measurement</h3>
+              <p>A scan gives imperfect range and bearing, not direct access to the full true state. The tracker only improves when new measurements arrive.</p>
+            </section>
+            <section class="intro-card">
+              <h3>Radar revisit</h3>
+              <p>Revisit rate controls how often an object is seen again. Faster revisit means more frequent corrections and less time for prediction error to grow.</p>
+            </section>
+            <section class="intro-card">
+              <h3>Kalman constant-velocity model</h3>
+              <p>The estimator assumes motion is locally first-order. That is simple, fast, and often useful, but it becomes fragile when truth dynamics contain stronger curvature or acceleration.</p>
+            </section>
+            <section class="intro-card">
+              <h3>Truth-model mismatch</h3>
+              <p>The simulated objects can follow bounded second-order motion. This mismatch is intentional: it lets us test how robust the tracker remains when the underlying motion is not perfectly aligned with the estimator model.</p>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel intro-panel intro-panel-wide">
+          <div class="section-head">
+            <div>
+              <h2>How To Read The App</h2>
+              <p class="section-caption">A recommended reading order for someone new to the project.</p>
+            </div>
+          </div>
+          <div class="intro-flow">
+            <section class="intro-step">
+              <p class="intro-step-index">1</p>
+              <div>
+                <h3>Start with the demo</h3>
+                <p>Use <a href="./index.html">Live Demo</a> to build intuition. Watch how detections appear, disappear, and re-anchor the estimate as the radar beam rotates.</p>
+              </div>
+            </section>
+            <section class="intro-step">
+              <p class="intro-step-index">2</p>
+              <div>
+                <h3>Inspect the evidence</h3>
+                <p>Open <a href="./analysis.html">Analysis</a> to compare tracks, conditions, and trajectories. This is where the behavior becomes measurable rather than only visual.</p>
+              </div>
+            </section>
+            <section class="intro-step">
+              <p class="intro-step-index">3</p>
+              <div>
+                <h3>Read the takeaways</h3>
+                <p>Finish with <a href="./results.html">Results</a> for the short external-facing conclusions: what improved, what degraded, and what the current batch supports confidently.</p>
+              </div>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel intro-panel">
+          <div class="section-head">
+            <div>
+              <h2>What This Demonstrates</h2>
+              <p class="section-caption">The intended engineering message, in plain language.</p>
+            </div>
+          </div>
+          <div class="intro-card-grid intro-card-grid-single">
+            <section class="intro-card intro-highlight-card">
+              <h3>A tracking model can be useful before it is perfect</h3>
+              <p>The app shows why a simple tracking model may still be operationally helpful, but also why sensing cadence, sensing precision, and motion mismatch matter. In other words: a decent estimator can support proximity operations, but only inside a sensing-and-dynamics envelope that should be made explicit.</p>
+            </section>
+          </div>
+        </article>
+
+        <article class="panel intro-panel">
+          <div class="section-head">
+            <div>
+              <h2>Limits Of The Sandbox</h2>
+              <p class="section-caption">Useful caveats before over-interpreting the results.</p>
+            </div>
+          </div>
+          <ul class="analysis-list">
+            <li>The truth model is physically inspired, not a full orbital mechanics model.</li>
+            <li>The radar is local and proximity-oriented, not a representation of large-scale ground surveillance.</li>
+            <li>The tracker is deliberately simple, so that estimator mismatch remains visible.</li>
+            <li>The point is comparative insight, not flight qualification.</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

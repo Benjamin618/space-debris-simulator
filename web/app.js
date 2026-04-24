@@ -238,6 +238,7 @@ class Track {
     this.lastTruthCategory = null;
     this.lastDetectionX = detection.x;
     this.lastDetectionY = detection.y;
+    this.detectionCount = 0;
     this.updateClassification(detection.classification);
     this.pushDetection(detection.x, detection.y, detection.classification.estimatedCategory);
     this.pushHistory();
@@ -280,6 +281,7 @@ class Track {
   }
 
   pushDetection(x, y, estimatedCategory) {
+    this.detectionCount += 1;
     this.detectionHistory.push({
       x,
       y,
@@ -342,6 +344,17 @@ class Track {
   predictionHorizonS(scanRateDegS) {
     const revisitIntervalS = 360 / scanRateDegS;
     return Math.max(0.9, revisitIntervalS - this.timeSinceUpdate);
+  }
+
+  trackStatus(scanRateDegS) {
+    const revisitIntervalS = 360 / scanRateDegS;
+    if (this.timeSinceUpdate <= revisitIntervalS * 0.6) {
+      return "fresh";
+    }
+    if (this.timeSinceUpdate <= revisitIntervalS * 1.6) {
+      return "coasting";
+    }
+    return "stale";
   }
 }
 
@@ -460,6 +473,7 @@ class RadarSensor {
     this.scanAngleDeg = 0;
     this.lastDetectionCount = 0;
     this.lastDetectionTimes = new Map();
+    this.recentDetections = [];
   }
 
   reset() {
@@ -468,6 +482,7 @@ class RadarSensor {
     this.scanAngleDeg = 0;
     this.lastDetectionCount = 0;
     this.lastDetectionTimes.clear();
+    this.recentDetections = [];
   }
 
   update(dt, world) {
@@ -515,6 +530,7 @@ class RadarSensor {
       this.lastDetectionTimes.set(object.name, world.simTime);
     }
     this.lastDetectionCount = detections.length;
+    this.recentDetections = detections;
     this.trackManager.applyDetections(detections);
   }
 
@@ -534,38 +550,17 @@ class SimulationWorld {
   constructor(config) {
     this.width = config.world.width;
     this.height = config.world.height;
+    this.timeScale = config.world.time_scale ?? 1;
     this.simTime = 0;
     this.classStyles = config.class_styles;
     this.egoControl = {
-      speedLevels: config.ego_control?.speed_levels ?? [20, 40, 80],
-      frameRatio: config.ego_control?.frame_ratio ?? 0.4,
       showFrame: config.ego_control?.show_frame ?? true,
-      actionIntervalMs: config.ego_control?.action_interval_ms ?? 1000,
-      batteryCapacity: config.ego_control?.battery_capacity ?? 100,
-      batteryDrainScale: config.ego_control?.battery_drain_scale ?? 0.0002,
-      collectPadding: config.ego_control?.collect_radius_padding ?? 10,
-      threatRadius: config.ego_control?.threat_radius ?? 180,
-      threatClearRadius: config.ego_control?.threat_clear_radius ?? 240,
-      collisionPadding: config.ego_control?.collision_padding ?? 8,
     };
     this.mission = {
       durationLimitS: config.mission?.duration_limit_s ?? 180,
-      collectedPoints: config.mission?.collected_points ?? 12,
-      avoidedPoints: config.mission?.avoided_points ?? 4,
-      missedPenalty: config.mission?.missed_penalty ?? 18,
-      sobrietyBonusMax: config.mission?.sobriety_bonus_max ?? 20,
     };
     this.ego = new SpaceObject(config.ego, this.classStyles[config.ego.object_class], true);
     this.objects = config.objects.map((item) => new SpaceObject(item, this.classStyles[item.object_class]));
-    this.controlBounds = this.computeControlBounds();
-    this.egoDirection = this.resolveInitialDirection();
-    this.egoSpeedLevelIndex = this.resolveInitialSpeedLevelIndex();
-    this.battery = this.egoControl.batteryCapacity;
-    this.metrics = {
-      collected: 0,
-      avoided: 0,
-      missed: 0,
-    };
     this.missionEnded = false;
     this.missionEndReason = null;
     this.classifier = new VisionClassifier(config.classification);
@@ -581,115 +576,19 @@ class SimulationWorld {
   }
 
   get currentEgoSpeed() {
-    if (this.egoDirection === null || this.egoSpeedLevelIndex < 0 || this.battery <= 0) {
-      return 0;
-    }
-
-    return this.egoControl.speedLevels[this.egoSpeedLevelIndex] ?? 0;
+    return 0;
   }
 
   get energyUsed() {
-    return this.egoControl.batteryCapacity - this.battery;
+    return 0;
   }
 
   get sobrietyBonus() {
-    return Math.round((this.battery / this.egoControl.batteryCapacity) * this.mission.sobrietyBonusMax);
+    return 0;
   }
 
   get score() {
-    return (
-      this.metrics.collected * this.mission.collectedPoints
-      + this.metrics.avoided * this.mission.avoidedPoints
-      - this.metrics.missed * this.mission.missedPenalty
-      + this.sobrietyBonus
-    );
-  }
-
-  computeControlBounds() {
-    const frameWidth = this.width * this.egoControl.frameRatio;
-    const frameHeight = this.height * this.egoControl.frameRatio;
-    return {
-      minX: (this.width - frameWidth) / 2,
-      maxX: (this.width + frameWidth) / 2,
-      minY: (this.height - frameHeight) / 2,
-      maxY: (this.height + frameHeight) / 2,
-      width: frameWidth,
-      height: frameHeight,
-    };
-  }
-
-  resolveInitialDirection() {
-    if (this.ego.vx > 0) {
-      return "right";
-    }
-    if (this.ego.vx < 0) {
-      return "left";
-    }
-    if (this.ego.vy > 0) {
-      return "down";
-    }
-    if (this.ego.vy < 0) {
-      return "up";
-    }
-    return null;
-  }
-
-  resolveInitialSpeedLevelIndex() {
-    const speed = Math.hypot(this.ego.vx, this.ego.vy);
-    if (speed < 1e-6) {
-      return -1;
-    }
-
-    const exactMatchIndex = this.egoControl.speedLevels.findIndex((level) => Math.abs(level - speed) < 1e-6);
-    if (exactMatchIndex >= 0) {
-      return exactMatchIndex;
-    }
-
-    return this.egoControl.speedLevels.findIndex((level) => level >= speed);
-  }
-
-  stopEgo() {
-    this.egoDirection = null;
-    this.egoSpeedLevelIndex = -1;
-    this.ego.vx = 0;
-    this.ego.vy = 0;
-  }
-
-  setEgoMotion(direction, speedLevelIndex) {
-    if (direction === null || speedLevelIndex < 0 || this.battery <= 0) {
-      this.stopEgo();
-      return;
-    }
-
-    this.egoDirection = direction;
-    this.egoSpeedLevelIndex = clamp(speedLevelIndex, 0, this.egoControl.speedLevels.length - 1);
-  }
-
-  applyPlayerAction(direction) {
-    const oppositeDirections = {
-      up: "down",
-      down: "up",
-      left: "right",
-      right: "left",
-    };
-
-    if (this.battery <= 0) {
-      this.stopEgo();
-      return;
-    }
-
-    if (this.egoDirection !== null && oppositeDirections[direction] === this.egoDirection) {
-      this.stopEgo();
-      return;
-    }
-
-    if (this.egoDirection === direction) {
-      this.egoSpeedLevelIndex = clamp(this.egoSpeedLevelIndex + 1, 0, this.egoControl.speedLevels.length - 1);
-      return;
-    }
-
-    this.egoDirection = direction;
-    this.egoSpeedLevelIndex = 0;
+    return 0;
   }
 
   update(dt) {
@@ -702,104 +601,20 @@ class SimulationWorld {
     for (const object of this.activeObjects) {
       object.update(dt, this.width, this.height);
     }
-    this.evaluateInteractions();
     this.radar.update(dt, this);
     this.evaluateMissionState();
   }
 
   updateEgo(dt) {
-    let vx = 0;
-    let vy = 0;
-    const speed = this.currentEgoSpeed;
-
-    if (this.egoDirection === "up") {
-      vy = -speed;
-    } else if (this.egoDirection === "down") {
-      vy = speed;
-    } else if (this.egoDirection === "left") {
-      vx = -speed;
-    } else if (this.egoDirection === "right") {
-      vx = speed;
-    }
-
-    this.ego.vx = vx;
-    this.ego.vy = vy;
-    this.ego.x = clamp(this.ego.x + vx * dt, this.controlBounds.minX, this.controlBounds.maxX);
-    this.ego.y = clamp(this.ego.y + vy * dt, this.controlBounds.minY, this.controlBounds.maxY);
-    this.ego.trail.push([this.ego.x, this.ego.y]);
-    if (this.ego.trail.length > 90) {
-      this.ego.trail.shift();
-    }
-
-    this.consumeBattery(speed, dt);
-  }
-
-  consumeBattery(speed, dt) {
-    if (this.battery <= 0) {
-      return;
-    }
-
-    const idleDrain = (this.egoControl.batteryCapacity / this.mission.durationLimitS) * dt;
-    const motionDrain = speed * speed * this.egoControl.batteryDrainScale * dt;
-    this.battery = Math.max(0, this.battery - idleDrain - motionDrain);
-    if (this.battery <= 0) {
-      this.stopEgo();
-    }
-  }
-
-  evaluateInteractions() {
-    for (const object of this.activeObjects) {
-      const deltaX = shortestAxisDelta(this.ego.x, object.x, this.width);
-      const deltaY = shortestAxisDelta(this.ego.y, object.y, this.height);
-      const distance = Math.hypot(deltaX, deltaY);
-
-      if (object.objectClass === "collectable_debris") {
-        const collectRadius = this.ego.radius + object.radius + this.egoControl.collectPadding;
-        if (distance <= collectRadius) {
-          object.active = false;
-          this.metrics.collected += 1;
-        }
-        continue;
-      }
-
-      if (object.objectClass !== "dangerous_debris") {
-        continue;
-      }
-
-      const collisionRadius = this.ego.radius + object.radius + this.egoControl.collisionPadding;
-      if (distance <= collisionRadius) {
-        object.active = false;
-        if (!object.avoided) {
-          this.metrics.missed += 1;
-        }
-        continue;
-      }
-
-      if (!object.inThreatZone && distance <= this.egoControl.threatRadius) {
-        object.inThreatZone = true;
-      } else if (object.inThreatZone && !object.avoided && distance >= this.egoControl.threatClearRadius) {
-        object.avoided = true;
-        object.active = false;
-        this.metrics.avoided += 1;
-      }
-    }
+    this.ego.vx = 0;
+    this.ego.vy = 0;
+    this.ego.trail = [[this.ego.x, this.ego.y]];
+    void dt;
   }
 
   evaluateMissionState() {
     if (this.simTime >= this.mission.durationLimitS) {
-      this.endMission("Time limit reached");
-      return;
-    }
-
-    if (this.battery <= 0) {
-      this.endMission("Battery depleted");
-      return;
-    }
-
-    const remainingTargets = this.activeObjects.filter((object) =>
-      object.objectClass === "collectable_debris" || object.objectClass === "dangerous_debris");
-    if (remainingTargets.length === 0) {
-      this.endMission("Objectives completed");
+      this.endMission("Run complete");
     }
   }
 
@@ -810,67 +625,36 @@ class SimulationWorld {
 
     this.missionEnded = true;
     this.missionEndReason = reason;
-    this.stopEgo();
   }
 }
 
 class CanvasSimulationApp {
   constructor() {
-    this.canvas = document.getElementById("sim-canvas");
-    this.ctx = this.canvas.getContext("2d");
+    this.truthCanvas = document.getElementById("truth-canvas");
+    this.truthCtx = this.truthCanvas.getContext("2d");
+    this.radarTruthCanvas = document.getElementById("radar-truth-canvas");
+    this.radarTruthCtx = this.radarTruthCanvas.getContext("2d");
     this.radarCanvas = document.getElementById("radar-canvas");
     this.radarCtx = this.radarCanvas.getContext("2d");
     this.pauseButton = document.getElementById("pause-button");
     this.resetButton = document.getElementById("reset-button");
-    this.missionRestartButton = document.getElementById("mission-restart-button");
-    this.modeSelect = document.getElementById("mode-select");
     this.scenarioSelect = document.getElementById("scenario-select");
+    this.trackSelect = document.getElementById("track-select");
     this.statusBadge = document.getElementById("status-badge");
     this.radarQualityBadge = document.getElementById("radar-quality-badge");
-    this.missionSummary = {
-      root: document.getElementById("mission-summary"),
-      title: document.getElementById("mission-summary-title"),
-      reason: document.getElementById("mission-summary-reason"),
-      score: document.getElementById("mission-summary-score"),
-      duration: document.getElementById("mission-summary-duration"),
-      energy: document.getElementById("mission-summary-energy"),
-      sobriety: document.getElementById("mission-summary-sobriety"),
-      collected: document.getElementById("mission-summary-collected"),
-      avoided: document.getElementById("mission-summary-avoided"),
-      missed: document.getElementById("mission-summary-missed"),
-    };
-
-    this.stats = {
-      status: document.getElementById("stat-status"),
-      time: document.getElementById("stat-time"),
-      fps: document.getElementById("stat-fps"),
-      objects: document.getElementById("stat-objects"),
-      worldSize: document.getElementById("stat-world-size"),
-      scenario: document.getElementById("stat-scenario"),
-      mode: document.getElementById("stat-mode"),
-      command: document.getElementById("stat-command"),
-      egoState: document.getElementById("stat-ego-state"),
-      egoSpeed: document.getElementById("stat-ego-speed"),
-      battery: document.getElementById("stat-battery"),
-      energyUsed: document.getElementById("stat-energy-used"),
-      collected: document.getElementById("stat-collected"),
-      avoided: document.getElementById("stat-avoided"),
-      missed: document.getElementById("stat-missed"),
-      sobriety: document.getElementById("stat-sobriety"),
-      score: document.getElementById("stat-score"),
-      radarAngle: document.getElementById("stat-radar-angle"),
-      radarDetections: document.getElementById("stat-radar-detections"),
-    };
-
+    this.truthLegend = document.getElementById("truth-legend");
+    this.radarLegend = document.getElementById("radar-legend");
     this.legendList = document.getElementById("legend-list");
-    this.entityList = document.getElementById("entity-list");
-    this.trackList = document.getElementById("track-list");
-
+    this.radarLog = document.getElementById("radar-log");
+    this.trackMetrics = document.getElementById("track-metrics");
+    this.statusSummary = document.getElementById("status-summary");
     this.currentScenarioKey = "default";
-    this.currentMode = "player";
     this.config = null;
     this.world = null;
     this.starField = [];
+    this.detectionLog = [];
+    this.radarTruthEchoes = new Map();
+    this.selectedTrackName = null;
     this.isPaused = false;
     this.showGrid = true;
     this.showLabels = true;
@@ -881,7 +665,6 @@ class CanvasSimulationApp {
     this.frameCounter = 0;
     this.fps = 0;
     this.fpsSampleTime = 0;
-    this.nextPilotActionTime = 0;
   }
 
   async init() {
@@ -900,16 +683,13 @@ class CanvasSimulationApp {
       this.resetScenario();
     });
 
-    this.missionRestartButton.addEventListener("click", () => {
-      this.resetScenario();
-    });
-
     this.scenarioSelect.addEventListener("change", async (event) => {
       await this.loadScenario(event.target.value);
     });
 
-    this.modeSelect.addEventListener("change", (event) => {
-      this.setControlMode(event.target.value, { syncSelect: false, resetMotion: true });
+    this.trackSelect.addEventListener("change", (event) => {
+      this.selectedTrackName = event.target.value || null;
+      this.refreshPanels(true);
     });
 
     window.addEventListener("keydown", async (event) => {
@@ -917,20 +697,17 @@ class CanvasSimulationApp {
         return;
       }
 
-      if (this.currentMode === "player" && event.key === "ArrowUp") {
-        this.issuePlayerAction("up");
-      } else if (this.currentMode === "player" && event.key === "ArrowDown") {
-        this.issuePlayerAction("down");
-      } else if (this.currentMode === "player" && event.key === "ArrowLeft") {
-        this.issuePlayerAction("left");
-      } else if (this.currentMode === "player" && event.key === "ArrowRight") {
-        this.issuePlayerAction("right");
-      }
-
       if (event.code === "Space") {
         event.preventDefault();
         this.isPaused = !this.isPaused;
         this.syncStatusUI();
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        this.cycleSelectedTrack(1);
+      } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        this.cycleSelectedTrack(-1);
+      } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+        this.cycleSelectedTrack(1);
       } else if (event.key === "g" || event.key === "G") {
         this.showGrid = !this.showGrid;
       } else if (event.key === "l" || event.key === "L") {
@@ -972,13 +749,13 @@ class CanvasSimulationApp {
     this.frameCounter = 0;
     this.fps = 0;
     this.fpsSampleTime = performance.now();
-    this.nextPilotActionTime = 0;
-    this.renderLegend();
-    this.setControlMode(this.currentMode, { syncSelect: true, resetMotion: true });
-    this.hideMissionSummary();
+    this.detectionLog = [];
+    this.radarTruthEchoes.clear();
+    this.selectedTrackName = null;
+    this.renderLegends();
     this.syncStatusUI();
     this.resizeCanvases();
-    this.refreshSidebar(true);
+    this.refreshPanels(true);
   }
 
   resetScenario() {
@@ -988,11 +765,11 @@ class CanvasSimulationApp {
     this.world = new SimulationWorld(this.config);
     this.isPaused = false;
     this.lastFrameTime = null;
-    this.nextPilotActionTime = 0;
-    this.setControlMode(this.currentMode, { syncSelect: true, resetMotion: true });
-    this.hideMissionSummary();
+    this.detectionLog = [];
+    this.radarTruthEchoes.clear();
+    this.selectedTrackName = null;
     this.syncStatusUI();
-    this.refreshSidebar(true);
+    this.refreshPanels(true);
   }
 
   generateStarField() {
@@ -1009,15 +786,26 @@ class CanvasSimulationApp {
   }
 
   resizeCanvases() {
-    this.resizeCanvas(this.canvas, this.ctx);
+    this.resizeCanvas(this.truthCanvas, this.truthCtx);
+    this.resizeCanvas(this.radarTruthCanvas, this.radarTruthCtx);
     this.resizeCanvas(this.radarCanvas, this.radarCtx);
+  }
+
+  measureCanvas(canvas) {
+    const host = canvas.parentElement;
+    const rect = host ? host.getBoundingClientRect() : canvas.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+    return { width, height };
   }
 
   resizeCanvas(canvas, ctx) {
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    const { width, height } = this.measureCanvas(canvas);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    canvas.width = Math.max(1, Math.floor(width * dpr));
+    canvas.height = Math.max(1, Math.floor(height * dpr));
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
   }
@@ -1036,13 +824,11 @@ class CanvasSimulationApp {
     this.lastFrameTime = timestamp;
 
     if (!this.isPaused) {
-      if (this.currentMode === "greedy") {
-        this.applyGreedyControl();
-      }
-      this.world.update(elapsed);
+      const simElapsed = elapsed * this.world.timeScale;
+      this.world.update(simElapsed);
+      this.ingestRadarState(simElapsed);
       if (this.world.missionEnded) {
         this.isPaused = true;
-        this.showMissionSummary();
         this.syncStatusUI();
       }
     }
@@ -1055,16 +841,100 @@ class CanvasSimulationApp {
     }
 
     this.drawTruthView();
+    this.drawRadarTruthView();
     this.drawRadarView();
     if (timestamp - this.lastPanelRefresh > 180) {
-      this.refreshSidebar();
+      this.refreshPanels();
       this.lastPanelRefresh = timestamp;
     }
   }
 
+  ingestRadarState(dt) {
+    for (const [name, echo] of this.radarTruthEchoes.entries()) {
+      echo.ttl -= dt;
+      if (echo.ttl <= 0) {
+        this.radarTruthEchoes.delete(name);
+      }
+    }
+
+    for (const detection of this.world.radar.recentDetections) {
+      const source = this.world.objects.find((object) => object.name === detection.objectName);
+      this.detectionLog.push({
+        simTime: this.world.simTime,
+        objectName: detection.objectName,
+        measuredRange: detection.range,
+        measuredBearingDeg: detection.bearingDeg,
+        estimatedCategory: detection.classification.estimatedCategory,
+      });
+      if (this.detectionLog.length > 18) {
+        this.detectionLog.shift();
+      }
+
+      if (source) {
+        this.radarTruthEchoes.set(detection.objectName, {
+          x: source.x,
+          y: source.y,
+          estimatedCategory: detection.classification.estimatedCategory,
+          ttl: 5,
+          maxTtl: 5,
+        });
+      }
+    }
+  }
+
+  syncSelectedTrack() {
+    const trackNames = this.world ? this.world.radar.trackManager.orderedTracks.map((track) => track.objectName) : [];
+    if (trackNames.length === 0) {
+      this.selectedTrackName = null;
+      this.trackSelect.innerHTML = '<option value="">Auto</option>';
+      return;
+    }
+
+    if (!trackNames.includes(this.selectedTrackName)) {
+      this.selectedTrackName = trackNames[0];
+    }
+
+    const previousValue = this.trackSelect.value;
+    this.trackSelect.innerHTML = "";
+    for (const trackName of trackNames) {
+      const option = document.createElement("option");
+      option.value = trackName;
+      option.textContent = trackName;
+      if (trackName === this.selectedTrackName) {
+        option.selected = true;
+      }
+      this.trackSelect.appendChild(option);
+    }
+    if (previousValue && trackNames.includes(previousValue)) {
+      this.trackSelect.value = previousValue;
+      this.selectedTrackName = previousValue;
+    }
+  }
+
+  cycleSelectedTrack(step) {
+    if (!this.world) {
+      return;
+    }
+    const trackNames = this.world.radar.trackManager.orderedTracks.map((track) => track.objectName);
+    if (trackNames.length === 0) {
+      return;
+    }
+    const currentIndex = Math.max(0, trackNames.indexOf(this.selectedTrackName));
+    const nextIndex = (currentIndex + step + trackNames.length) % trackNames.length;
+    this.selectedTrackName = trackNames[nextIndex];
+    this.trackSelect.value = this.selectedTrackName;
+    this.refreshPanels(true);
+  }
+
+  get selectedTrack() {
+    if (!this.world || this.selectedTrackName === null) {
+      return null;
+    }
+    return this.world.radar.trackManager.orderedTracks.find((track) => track.objectName === this.selectedTrackName) ?? null;
+  }
+
   computeViewport(canvas, worldWidth, worldHeight) {
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
+    const { width, height } = this.measureCanvas(canvas);
     const padding = 22;
     const renderWidth = width - padding * 2;
     const renderHeight = height - padding * 2;
@@ -1084,39 +954,61 @@ class CanvasSimulationApp {
   }
 
   drawTruthView() {
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
-    const viewport = this.computeViewport(this.canvas, this.world.width, this.world.height);
+    this.drawWorldPanel(this.truthCanvas, this.truthCtx, {
+      filteredToRadar: false,
+      showStars: true,
+    });
+  }
 
-    this.ctx.clearRect(0, 0, width, height);
-    this.drawBackground(this.ctx, width, height);
-    this.drawStars(viewport);
+  drawRadarTruthView() {
+    this.drawWorldPanel(this.radarTruthCanvas, this.radarTruthCtx, {
+      filteredToRadar: true,
+      showStars: false,
+    });
+  }
+
+  drawWorldPanel(canvas, ctx, options) {
+    const { filteredToRadar, showStars } = options;
+    const { width, height } = this.measureCanvas(canvas);
+    const viewport = this.computeViewport(canvas, this.world.width, this.world.height);
+
+    ctx.clearRect(0, 0, width, height);
+    this.drawBackground(ctx, width, height);
+    if (showStars) {
+      this.drawStars(ctx, viewport);
+    }
     if (this.showGrid) {
-      this.drawGrid(viewport);
+      this.drawGrid(ctx, viewport);
     }
 
-    this.ctx.strokeStyle = COLORS.worldFrame;
-    this.ctx.lineWidth = 2;
-    this.roundRect(this.ctx, viewport.originX, viewport.originY, viewport.width, viewport.height, 18, false, true);
+    ctx.strokeStyle = COLORS.worldFrame;
+    ctx.lineWidth = 2;
+    this.roundRect(ctx, viewport.originX, viewport.originY, viewport.width, viewport.height, 18, false, true);
+    this.drawWorldRadarRanges(ctx, viewport);
 
-    if (this.world.egoControl.showFrame) {
-      this.drawControlFrame(viewport);
+    if (filteredToRadar) {
+      this.drawRadarTruthMask(ctx, viewport);
+      const visibleObjects = [this.world.ego, ...this.visibleRadarObjects()];
+      for (const object of visibleObjects) {
+        this.drawObject(ctx, viewport, object);
+      }
+      this.drawRadarTruthEchoes(ctx, viewport);
+      return;
     }
 
     if (this.showTrails) {
       for (const object of this.world.allObjects) {
-        this.drawTrail(viewport, object);
+        this.drawTrail(ctx, viewport, object);
       }
     }
 
     for (const object of this.world.allObjects) {
-      this.drawObject(viewport, object);
+      this.drawObject(ctx, viewport, object);
     }
   }
 
   drawRadarView() {
-    const width = this.radarCanvas.clientWidth;
-    const height = this.radarCanvas.clientHeight;
+    const { width, height } = this.measureCanvas(this.radarCanvas);
     const centerX = width / 2;
     const centerY = height / 2;
     const radius = Math.max(70, Math.min(width, height) * 0.38);
@@ -1300,59 +1192,133 @@ class CanvasSimulationApp {
     ctx.fill();
   }
 
-  drawStars(viewport) {
-    this.ctx.fillStyle = "#ffffff";
+  drawStars(ctx, viewport) {
+    ctx.fillStyle = "#ffffff";
     for (const star of this.starField) {
       const point = this.worldToScreen(viewport, star.x, star.y);
-      this.ctx.beginPath();
-      this.ctx.arc(point.x, point.y, star.radius, 0, Math.PI * 2);
-      this.ctx.fill();
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, star.radius, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 
-  drawGrid(viewport) {
-    this.ctx.strokeStyle = COLORS.grid;
-    this.ctx.lineWidth = 1;
+  drawGrid(ctx, viewport) {
+    ctx.strokeStyle = COLORS.grid;
+    ctx.lineWidth = 1;
     for (let x = 0; x <= this.world.width; x += this.config.world.grid_spacing) {
       const start = this.worldToScreen(viewport, x, 0);
       const end = this.worldToScreen(viewport, x, this.world.height);
-      this.ctx.beginPath();
-      this.ctx.moveTo(start.x, start.y);
-      this.ctx.lineTo(end.x, end.y);
-      this.ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
     }
 
     for (let y = 0; y <= this.world.height; y += this.config.world.grid_spacing) {
       const start = this.worldToScreen(viewport, 0, y);
       const end = this.worldToScreen(viewport, this.world.width, y);
-      this.ctx.beginPath();
-      this.ctx.moveTo(start.x, start.y);
-      this.ctx.lineTo(end.x, end.y);
-      this.ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
     }
   }
 
-  drawControlFrame(viewport) {
-    const bounds = this.world.controlBounds;
-    const topLeft = this.worldToScreen(viewport, bounds.minX, bounds.minY);
-    const width = bounds.width * viewport.scale;
-    const height = bounds.height * viewport.scale;
-
-    this.ctx.save();
-    this.ctx.strokeStyle = COLORS.controlFrame;
-    this.ctx.lineWidth = 2;
-    this.ctx.setLineDash([8, 8]);
-    this.roundRect(this.ctx, topLeft.x, topLeft.y, width, height, 14, false, true);
-    this.ctx.restore();
+  drawWorldRadarRanges(ctx, viewport) {
+    const center = this.worldToScreen(viewport, this.world.ego.x, this.world.ego.y);
+    const maxRangePx = this.world.radar.config.maxRange * viewport.scale;
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 214, 102, 0.26)";
+    ctx.lineWidth = 1;
+    for (let ringIndex = 1; ringIndex <= 4; ringIndex += 1) {
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, maxRangePx * ringIndex / 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
-  drawTrail(viewport, object) {
+  drawRadarTruthMask(ctx, viewport) {
+    const center = this.worldToScreen(viewport, this.world.ego.x, this.world.ego.y);
+    const maxRangePx = this.world.radar.config.maxRange * viewport.scale;
+    const beamAngle = degToRad(this.world.radar.scanAngleDeg);
+    const halfBeam = degToRad(this.world.radar.config.beamWidthDeg / 2);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(2, 8, 16, 0.8)";
+    ctx.fillRect(viewport.originX, viewport.originY, viewport.width, viewport.height);
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.arc(center.x, center.y, maxRangePx, beamAngle - halfBeam, beamAngle + halfBeam);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 214, 102, 0.08)";
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.arc(center.x, center.y, maxRangePx, beamAngle - halfBeam, beamAngle + halfBeam);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = COLORS.radarBeamEdge;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.lineTo(
+      center.x + Math.cos(beamAngle - halfBeam) * maxRangePx,
+      center.y + Math.sin(beamAngle - halfBeam) * maxRangePx,
+    );
+    ctx.moveTo(center.x, center.y);
+    ctx.lineTo(
+      center.x + Math.cos(beamAngle + halfBeam) * maxRangePx,
+      center.y + Math.sin(beamAngle + halfBeam) * maxRangePx,
+    );
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawRadarTruthEchoes(ctx, viewport) {
+    for (const echo of this.radarTruthEchoes.values()) {
+      const point = this.worldToScreen(viewport, echo.x, echo.y);
+      const alpha = clamp(echo.ttl / echo.maxTtl, 0, 1);
+      const baseRadius = echo.estimatedCategory === "hazard_debris"
+        ? 8
+        : echo.estimatedCategory === "target_debris"
+        ? 6
+        : 4;
+      ctx.save();
+      ctx.fillStyle = categoryColor(echo.estimatedCategory).replace("0.95", `${0.16 + alpha * 0.44}`);
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, baseRadius + alpha * 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  isObjectVisibleToRadar(object) {
+    const relativeX = shortestAxisDelta(this.world.ego.x, object.x, this.world.width);
+    const relativeY = shortestAxisDelta(this.world.ego.y, object.y, this.world.height);
+    const range = Math.hypot(relativeX, relativeY);
+    if (range > this.world.radar.config.maxRange) {
+      return false;
+    }
+    const bearingDeg = normalizeAngleDeg(radToDeg(Math.atan2(relativeY, relativeX)));
+    return Math.abs(angularDifferenceDeg(this.world.radar.scanAngleDeg, bearingDeg)) <= this.world.radar.config.beamWidthDeg / 2;
+  }
+
+  visibleRadarObjects() {
+    return this.world.activeObjects.filter((object) => this.isObjectVisibleToRadar(object));
+  }
+
+  drawTrail(ctx, viewport, object) {
     if (object.trail.length < 2) {
       return;
     }
 
-    this.ctx.strokeStyle = rgbaFromRgb(object.color, COLORS.trailAlpha);
-    this.ctx.lineWidth = 2;
+    ctx.strokeStyle = rgbaFromRgb(object.color, COLORS.trailAlpha);
+    ctx.lineWidth = 2;
     for (let index = 0; index < object.trail.length - 1; index += 1) {
       const start = this.worldToScreen(viewport, object.trail[index][0], object.trail[index][1]);
       const end = this.worldToScreen(viewport, object.trail[index + 1][0], object.trail[index + 1][1]);
@@ -1362,70 +1328,70 @@ class CanvasSimulationApp {
       if (Math.abs(start.y - end.y) > viewport.height * 0.5) {
         continue;
       }
-      this.ctx.beginPath();
-      this.ctx.moveTo(start.x, start.y);
-      this.ctx.lineTo(end.x, end.y);
-      this.ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
     }
   }
 
-  drawObject(viewport, object) {
+  drawObject(ctx, viewport, object) {
     const point = this.worldToScreen(viewport, object.x, object.y);
     const radius = Math.max(4, object.radius * viewport.scale);
 
     if (object.isEgo) {
-      this.drawSatellite(point, radius, object.headingRad, object.color);
+      this.drawSatellite(ctx, point, radius, object.headingRad, object.color);
     } else {
-      this.ctx.fillStyle = `rgb(${object.color.join(",")})`;
-      this.ctx.beginPath();
-      this.ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-      this.ctx.fill();
-      this.ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-      this.ctx.lineWidth = 1;
-      this.ctx.stroke();
+      ctx.fillStyle = `rgb(${object.color.join(",")})`;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
 
     if (this.showVectors && object.speed > 0.1) {
-      this.ctx.strokeStyle = `rgb(${object.color.join(",")})`;
-      this.ctx.lineWidth = 2;
-      this.ctx.beginPath();
-      this.ctx.moveTo(point.x, point.y);
-      this.ctx.lineTo(
+      ctx.strokeStyle = `rgb(${object.color.join(",")})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y);
+      ctx.lineTo(
         point.x + object.vx * viewport.scale * 0.8,
         point.y + object.vy * viewport.scale * 0.8,
       );
-      this.ctx.stroke();
+      ctx.stroke();
     }
 
     if (this.showLabels) {
-      this.ctx.fillStyle = COLORS.textPrimary;
-      this.ctx.font = '13px "IBM Plex Sans", sans-serif';
-      this.ctx.textAlign = "center";
-      this.ctx.textBaseline = "bottom";
-      this.ctx.fillText(`${object.name} [${object.objectClass}]`, point.x, point.y - radius - 8);
+      ctx.fillStyle = COLORS.textPrimary;
+      ctx.font = '13px "IBM Plex Sans", sans-serif';
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`${object.name} [${object.objectClass}]`, point.x, point.y - radius - 8);
     }
   }
 
-  drawSatellite(point, radius, heading, color) {
+  drawSatellite(ctx, point, radius, heading, color) {
     const polygon = [
       [point.x + Math.cos(heading) * radius * 1.6, point.y + Math.sin(heading) * radius * 1.6],
       [point.x + Math.cos(heading + 2.45) * radius * 1.2, point.y + Math.sin(heading + 2.45) * radius * 1.2],
       [point.x + Math.cos(heading - 2.45) * radius * 1.2, point.y + Math.sin(heading - 2.45) * radius * 1.2],
     ];
 
-    this.ctx.fillStyle = `rgb(${color.join(",")})`;
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.96)";
-    this.ctx.lineWidth = 2;
-    this.ctx.beginPath();
-    this.ctx.moveTo(polygon[0][0], polygon[0][1]);
-    this.ctx.lineTo(polygon[1][0], polygon[1][1]);
-    this.ctx.lineTo(polygon[2][0], polygon[2][1]);
-    this.ctx.closePath();
-    this.ctx.fill();
-    this.ctx.stroke();
+    ctx.fillStyle = `rgb(${color.join(",")})`;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.96)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(polygon[0][0], polygon[0][1]);
+    ctx.lineTo(polygon[1][0], polygon[1][1]);
+    ctx.lineTo(polygon[2][0], polygon[2][1]);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
 
-  renderLegend() {
+  renderLegends() {
     this.legendList.innerHTML = "";
     for (const [className, style] of Object.entries(this.config.class_styles)) {
       const item = document.createElement("div");
@@ -1439,260 +1405,145 @@ class CanvasSimulationApp {
       `;
       this.legendList.appendChild(item);
     }
+    this.truthLegend.innerHTML = `
+      <h3>Legend</h3>
+      <div class="mini-legend-list">
+        <div class="mini-legend-row"><span class="mini-legend-dot" style="background: rgb(86, 214, 255)"></span><span>Ego satellite</span></div>
+        <div class="mini-legend-row"><span class="mini-legend-dot" style="background: rgb(255, 107, 107)"></span><span>Dangerous debris</span></div>
+        <div class="mini-legend-row"><span class="mini-legend-dot" style="background: rgb(255, 214, 102)"></span><span>Collectable debris</span></div>
+        <div class="mini-legend-row"><span class="mini-legend-dot" style="background: rgb(134, 239, 172)"></span><span>Neutral object</span></div>
+      </div>
+    `;
+    this.radarLegend.innerHTML = `
+      <h3>Legend</h3>
+      <div class="mini-legend-list">
+        <div class="mini-legend-row"><span class="mini-legend-square"></span><span>Measured positions</span></div>
+        <div class="mini-legend-row"><span class="mini-legend-cross"></span><span>Estimated state</span></div>
+        <div class="mini-legend-row"><span class="mini-legend-ellipse"></span><span>3 sigma envelope</span></div>
+      </div>
+    `;
   }
 
-  setControlMode(mode, options = {}) {
-    const { syncSelect = true, resetMotion = false } = options;
-    const nextMode = mode === "greedy" ? "greedy" : "player";
-    this.currentMode = nextMode;
-
-    if (syncSelect && this.modeSelect) {
-      this.modeSelect.value = nextMode;
-    }
-
+  refreshPanels(force = false) {
+    void force;
     if (!this.world) {
       return;
     }
 
-    this.nextPilotActionTime = this.world.simTime;
-
-    if (nextMode === "player" && resetMotion) {
-      this.world.stopEgo();
-    }
-
-    if (nextMode === "greedy") {
-      this.applyGreedyControl();
-    }
-
-    this.syncStatusUI();
-    this.refreshSidebar(true);
-  }
-
-  applyGreedyControl() {
-    if (!this.world || this.world.battery <= 0 || this.world.missionEnded) {
-      return;
-    }
-
-    if (this.world.simTime + 1e-6 < this.nextPilotActionTime) {
-      return;
-    }
-
-    const nextCommand = this.chooseGreedyCommand();
-    if (nextCommand !== null) {
-      this.world.setEgoMotion(nextCommand.direction, nextCommand.speedLevelIndex);
-      this.nextPilotActionTime = this.world.simTime + this.world.egoControl.actionIntervalMs / 1000;
-    }
-  }
-
-  chooseGreedyCommand() {
-    const ego = this.world.ego;
-    let nearestDanger = null;
-    let nearestCollectable = null;
-
-    for (const object of this.world.activeObjects) {
-      const deltaX = shortestAxisDelta(ego.x, object.x, this.world.width);
-      const deltaY = shortestAxisDelta(ego.y, object.y, this.world.height);
-      const distance = Math.hypot(deltaX, deltaY);
-      const candidate = { object, deltaX, deltaY, distance };
-
-      if (object.objectClass === "dangerous_debris") {
-        if (nearestDanger === null || distance < nearestDanger.distance) {
-          nearestDanger = candidate;
-        }
-      } else if (object.objectClass === "collectable_debris") {
-        if (nearestCollectable === null || distance < nearestCollectable.distance) {
-          nearestCollectable = candidate;
-        }
-      }
-    }
-
-    const escapeRadius = Math.min(this.world.controlBounds.width, this.world.controlBounds.height) * 0.38;
-    if (nearestDanger !== null && nearestDanger.distance <= escapeRadius) {
-      return {
-        direction: this.resolveAxisDirection(-nearestDanger.deltaX, -nearestDanger.deltaY),
-        speedLevelIndex: this.world.egoControl.speedLevels.length - 1,
-      };
-    }
-
-    if (nearestCollectable !== null) {
-      return {
-        direction: this.resolveAxisDirection(nearestCollectable.deltaX, nearestCollectable.deltaY),
-        speedLevelIndex: this.resolveGreedySpeedLevel(nearestCollectable.distance),
-      };
-    }
-
-    return null;
-  }
-
-  resolveGreedySpeedLevel(distance) {
-    if (distance >= this.world.egoControl.threatClearRadius) {
-      return this.world.egoControl.speedLevels.length - 1;
-    }
-    if (distance >= this.world.egoControl.threatRadius * 0.6) {
-      return Math.min(1, this.world.egoControl.speedLevels.length - 1);
-    }
-    return 0;
-  }
-
-  resolveAxisDirection(deltaX, deltaY) {
-    if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
-      return this.world.egoDirection ?? "right";
-    }
-
-    if (Math.abs(deltaX) >= Math.abs(deltaY)) {
-      return deltaX >= 0 ? "right" : "left";
-    }
-
-    return deltaY >= 0 ? "down" : "up";
-  }
-
-  issuePlayerAction(direction) {
-    if (!this.world || this.currentMode !== "player" || this.world.missionEnded) {
-      return;
-    }
-
-    if (this.world.battery <= 0 || this.world.simTime + 1e-6 < this.nextPilotActionTime) {
-      return;
-    }
-
-    this.world.applyPlayerAction(direction);
-    this.nextPilotActionTime = this.world.simTime + this.world.egoControl.actionIntervalMs / 1000;
-    this.refreshSidebar(true);
-  }
-
-  showMissionSummary() {
-    if (!this.world?.missionEnded) {
-      return;
-    }
-
-    this.missionSummary.title.textContent = "Mission Complete";
-    this.missionSummary.reason.textContent = this.world.missionEndReason ?? "Mission ended";
-    this.missionSummary.score.textContent = `${this.world.score}`;
-    this.missionSummary.duration.textContent = `${Math.min(this.world.simTime, this.world.mission.durationLimitS).toFixed(1)} s`;
-    this.missionSummary.energy.textContent = `${this.world.energyUsed.toFixed(1)}%`;
-    this.missionSummary.sobriety.textContent = `+${this.world.sobrietyBonus}`;
-    this.missionSummary.collected.textContent = `${this.world.metrics.collected}`;
-    this.missionSummary.avoided.textContent = `${this.world.metrics.avoided}`;
-    this.missionSummary.missed.textContent = `${this.world.metrics.missed}`;
-    this.missionSummary.root.hidden = false;
-  }
-
-  hideMissionSummary() {
-    this.missionSummary.root.hidden = true;
-  }
-
-  refreshSidebar(force = false) {
-    if (!this.world) {
-      return;
-    }
-
-    const commandCooldown = Math.max(0, this.nextPilotActionTime - this.world.simTime);
-    const egoState = this.world.missionEnded && this.world.missionEndReason !== null
-      ? this.world.missionEndReason
-      : this.world.battery <= 0
-      ? "Battery depleted"
-      : this.world.egoDirection === null
-      ? "Stopped"
-      : `Moving ${this.world.egoDirection}`;
-    const egoSpeed = this.world.currentEgoSpeed;
-    const tracks = this.world.radar.trackManager.orderedTracks;
-
-    this.stats.status.textContent = this.world.missionEnded
-      ? "Mission Complete"
-      : this.isPaused
-      ? "Paused"
-      : "Running";
-    this.stats.time.textContent = `${Math.min(this.world.simTime, this.world.mission.durationLimitS).toFixed(1)} s / ${this.world.mission.durationLimitS}s`;
-    this.stats.fps.textContent = `${this.fps.toFixed(1)} FPS`;
-    this.stats.objects.textContent = `${this.world.allObjects.length}`;
-    this.stats.worldSize.textContent = `${this.world.width} x ${this.world.height}`;
-    this.stats.scenario.textContent = this.currentScenarioKey === "default" ? "Default" : "Custom";
-    this.stats.mode.textContent = this.currentMode === "player" ? "Player" : "Greedy";
-    this.stats.command.textContent = this.world.missionEnded
-      ? "Mission ended"
-      : commandCooldown <= 0.05
-      ? "Ready"
-      : `${commandCooldown.toFixed(1)} s`;
-    this.stats.egoState.textContent = egoState;
-    this.stats.egoSpeed.textContent = `${egoSpeed.toFixed(0)} px/s`;
-    this.stats.battery.textContent = `${this.world.battery.toFixed(1)}%`;
-    this.stats.energyUsed.textContent = `${this.world.energyUsed.toFixed(1)}%`;
-    this.stats.collected.textContent = `${this.world.metrics.collected}`;
-    this.stats.avoided.textContent = `${this.world.metrics.avoided}`;
-    this.stats.missed.textContent = `${this.world.metrics.missed}`;
-    this.stats.sobriety.textContent = `+${this.world.sobrietyBonus}`;
-    this.stats.score.textContent = `${this.world.score}`;
-    this.stats.radarAngle.textContent = `${Math.round(this.world.radar.scanAngleDeg)} deg`;
-    this.stats.radarDetections.textContent = `${this.world.radar.lastDetectionCount}`;
+    this.syncSelectedTrack();
+    this.renderRadarLog();
+    this.renderTrackMetrics();
+    this.renderStatusSummary();
     this.radarQualityBadge.textContent = this.world.radar.lastDetectionCount > 0
       ? `${this.world.radar.lastDetectionCount} detection${this.world.radar.lastDetectionCount > 1 ? "s" : ""}`
       : "Scan Active";
-
-    if (!force && this.entityList.children.length === this.world.allObjects.length) {
-      for (const [index, object] of this.world.allObjects.entries()) {
-        const item = this.entityList.children[index];
-        item.querySelector(".entity-meta").textContent = `${object.speed.toFixed(1)} px/s`;
-      }
-    } else {
-      this.entityList.innerHTML = "";
-      for (const object of this.world.allObjects) {
-        const item = document.createElement("div");
-        item.className = "entity-item";
-        item.innerHTML = `
-          <div class="entity-label">
-            <span class="swatch" style="background: rgb(${object.color.join(",")})"></span>
-            <span>${object.name}</span>
-          </div>
-          <span class="entity-meta">${object.speed.toFixed(1)} px/s</span>
-        `;
-        this.entityList.appendChild(item);
-      }
-    }
-
-    this.trackList.innerHTML = "";
-    if (tracks.length === 0) {
-      const item = document.createElement("div");
-      item.className = "entity-item";
-      item.innerHTML = `
-        <div class="entity-label">
-          <span>No tracks yet</span>
-        </div>
-        <span class="entity-meta">waiting for beam revisit</span>
-      `;
-      this.trackList.appendChild(item);
-      return;
-    }
-
-    for (const track of tracks) {
-      const item = document.createElement("div");
-      item.className = "entity-item";
-      item.innerHTML = `
-        <div class="entity-label">
-          <span class="swatch" style="background: ${COLORS.track}"></span>
-          <span>${track.id}</span>
-        </div>
-        <span class="entity-meta">${track.range.toFixed(0)} px</span>
-      `;
-      const detail = document.createElement("div");
-      detail.className = "entity-meta";
-      detail.style.whiteSpace = "normal";
-      detail.style.lineHeight = "1.45";
-      detail.textContent = `${categoryLabel(track.estimatedCategory)} | conf ${Math.round(track.confidence * 100)}% | quality ${track.observationLabel} | bearing ${Math.round(track.bearingDeg)} deg | age ${track.age.toFixed(1)} s`;
-      item.appendChild(detail);
-      this.trackList.appendChild(item);
-    }
   }
 
   syncStatusUI() {
     const status = this.world?.missionEnded
-      ? "Mission Complete"
+      ? "Run Complete"
       : this.isPaused
       ? "Paused"
       : "Running";
     this.statusBadge.textContent = status;
-    this.stats.status.textContent = status;
     this.pauseButton.disabled = this.world?.missionEnded ?? false;
     this.pauseButton.textContent = this.world?.missionEnded ? "Pause" : this.isPaused ? "Resume" : "Pause";
+  }
+
+  renderRadarLog() {
+    this.radarLog.innerHTML = "";
+    const logs = [...this.detectionLog].slice(-12).reverse();
+    if (logs.length === 0) {
+      this.radarLog.innerHTML = '<div class="detail-empty">Waiting for radar revisit...</div>';
+      return;
+    }
+
+    for (const entry of logs) {
+      const card = document.createElement("article");
+      card.className = "log-entry";
+      card.innerHTML = `
+        <div class="log-entry-head">
+          <span class="log-entry-name" style="color:${categoryColor(entry.estimatedCategory)}">${entry.objectName}</span>
+          <span class="log-entry-class">${categoryLabel(entry.estimatedCategory)}</span>
+        </div>
+        <div class="log-entry-meta">t=${entry.simTime.toFixed(1)} s | brg ${entry.measuredBearingDeg.toFixed(1)} deg | rng ${entry.measuredRange.toFixed(1)} px</div>
+      `;
+      this.radarLog.appendChild(card);
+    }
+  }
+
+  renderTrackMetrics() {
+    this.trackMetrics.innerHTML = "";
+    const track = this.selectedTrack;
+    if (track === null) {
+      this.trackMetrics.innerHTML = '<div class="detail-empty">Waiting for a confirmed track.</div>';
+      return;
+    }
+
+    const object = this.world.objects.find((item) => item.name === track.objectName) ?? null;
+    let truthRange = null;
+    let truthSpeed = null;
+    if (object) {
+      const dx = shortestAxisDelta(this.world.ego.x, object.x, this.world.width);
+      const dy = shortestAxisDelta(this.world.ego.y, object.y, this.world.height);
+      truthRange = Math.hypot(dx, dy);
+      truthSpeed = object.speed;
+    }
+
+    const detailLines = [
+      ["Track id", track.id],
+      ["Status", track.trackStatus(this.world.radar.config.scanRateDegS)],
+      ["Class", `${categoryLabel(track.estimatedCategory)} (${Math.round(track.confidence * 100)}%)`],
+      ["Detection count", `${track.detectionCount}`],
+      ["Estimated range", `${track.range.toFixed(1)} px`],
+      ["Truth range", truthRange === null ? "n/a" : `${truthRange.toFixed(1)} px`],
+      ["Bearing", `${track.bearingDeg.toFixed(1)} deg`],
+      ["Estimated speed", `${Math.hypot(track.vx, track.vy).toFixed(2)} px/s`],
+      ["Truth speed", truthSpeed === null ? "n/a" : `${truthSpeed.toFixed(2)} px/s`],
+      ["Track age", `${track.age.toFixed(2)} s`],
+      ["Time since update", `${track.timeSinceUpdate.toFixed(2)} s`],
+      ["Uncertainty sigma", `${track.sigma.toFixed(2)} px`],
+    ];
+
+    const card = document.createElement("article");
+    card.className = "detail-card";
+    card.innerHTML = `
+      <h3 style="color:${categoryColor(track.estimatedCategory)}">${track.objectName}</h3>
+      <div class="detail-lines">
+        ${detailLines.map(([label, value]) => `
+          <div class="detail-line">
+            <span class="detail-line-label">${label}</span>
+            <span class="detail-line-value">${value}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    this.trackMetrics.appendChild(card);
+  }
+
+  renderStatusSummary() {
+    const items = [
+      ["Status", this.world.missionEnded ? "Run complete" : this.isPaused ? "Paused" : "Running"],
+      ["Sim time", `${Math.min(this.world.simTime, this.world.mission.durationLimitS).toFixed(1)} s / ${this.world.mission.durationLimitS}s`],
+      ["Frame rate", `${this.fps.toFixed(1)} FPS`],
+      ["Time scale", `x${this.world.timeScale.toFixed(1)}`],
+      ["Scenario", this.currentScenarioKey === "default" ? "Default" : "Custom"],
+      ["Objects", `${this.world.activeObjects.length}`],
+      ["Tracks", `${this.world.radar.trackManager.orderedTracks.length}`],
+      ["Radar beam", `${this.world.radar.scanAngleDeg.toFixed(1)} deg`],
+      ["Beam width", `${this.world.radar.config.beamWidthDeg.toFixed(1)} deg`],
+      ["Scan rate", `${this.world.radar.config.scanRateDegS.toFixed(1)} deg/s`],
+      ["Radar range", `${this.world.radar.config.maxRange.toFixed(0)} px`],
+      ["Detections", `${this.world.radar.lastDetectionCount}`],
+      ["Ego state", "Fixed at scene center"],
+    ];
+
+    this.statusSummary.innerHTML = items.map(([label, value]) => `
+      <div class="status-item">
+        <dt>${label}</dt>
+        <dd>${value}</dd>
+      </div>
+    `).join("");
   }
 
   roundRect(ctx, x, y, width, height, radius, fill, stroke) {

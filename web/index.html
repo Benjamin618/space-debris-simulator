@@ -3,230 +3,142 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Space Debris Simulator - Web V2</title>
+  <title>Space Debris Simulator - Live Demo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=2026-04-24-live-demo-v3">
 </head>
 <body>
-  <div class="app-shell">
-    <main class="viewport-panel">
-      <header class="topbar">
-        <div class="topbar-title">
-          <p class="eyebrow">Canvas Web V2</p>
-          <h1>Space Debris Simulator</h1>
-          <nav class="page-nav" aria-label="Application pages">
-            <a class="page-nav-link page-nav-link-active" href="./index.html">Live Demo</a>
-            <a class="page-nav-link" href="./analysis.html">Analysis</a>
-          </nav>
-        </div>
-        <div class="toolbar">
-          <label class="field">
-            <span>Mode</span>
-            <select id="mode-select">
-              <option value="player">Player</option>
-              <option value="greedy">Greedy</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Scenario</span>
-            <select id="scenario-select">
-              <option value="default">Default</option>
-              <option value="custom">Custom</option>
-            </select>
-          </label>
-          <button id="pause-button" class="button button-primary" type="button">Pause</button>
-          <button id="reset-button" class="button" type="button">Restart Mission</button>
-        </div>
-      </header>
+  <div class="app-shell live-shell">
+    <header class="topbar panel topbar-panel">
+      <div class="topbar-title">
+        <p class="eyebrow">Live Demo</p>
+        <h1>Space Debris Simulator</h1>
+        <nav class="page-nav" aria-label="Application pages">
+          <a class="page-nav-link" href="./intro.html">Intro</a>
+          <a class="page-nav-link page-nav-link-active" href="./index.html">Live Demo</a>
+          <a class="page-nav-link" href="./analysis.html">Analysis</a>
+          <a class="page-nav-link" href="./results.html">Results</a>
+        </nav>
+      </div>
+      <div class="toolbar">
+        <label class="field">
+          <span>Scenario</span>
+          <select id="scenario-select">
+            <option value="default">Default</option>
+            <option value="custom">Custom</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Track</span>
+          <select id="track-select">
+            <option value="">Auto</option>
+          </select>
+        </label>
+        <button id="pause-button" class="button button-primary" type="button">Pause</button>
+        <button id="reset-button" class="button" type="button">Restart Run</button>
+      </div>
+    </header>
 
-      <section class="viewport-grid">
-        <article class="canvas-card">
-          <canvas id="sim-canvas" width="1280" height="720"></canvas>
-          <div class="canvas-overlay">
-            <div class="badge-row">
-              <span class="badge" id="status-badge">Running</span>
-              <span class="badge badge-muted">Truth View</span>
-            </div>
-            <p class="canvas-caption">World truth visualization. Colors are analyst-facing only, not sensor inputs.</p>
+    <main class="live-grid">
+      <article class="panel live-panel live-panel-canvas">
+        <div class="panel-header">
+          <div>
+            <h2>True Vision</h2>
+            <p class="section-caption">Analyst view of the full world state.</p>
           </div>
-          <div id="mission-summary" class="mission-summary" hidden>
-            <div class="mission-summary-card">
-              <p class="eyebrow mission-summary-eyebrow">Mission Summary</p>
-              <h2 id="mission-summary-title">Mission Complete</h2>
-              <p id="mission-summary-reason" class="mission-summary-reason">Objectives completed</p>
-              <dl class="mission-summary-grid">
-                <div>
-                  <dt>Score</dt>
-                  <dd id="mission-summary-score">0</dd>
-                </div>
-                <div>
-                  <dt>Duration</dt>
-                  <dd id="mission-summary-duration">0.0 s</dd>
-                </div>
-                <div>
-                  <dt>Energy Used</dt>
-                  <dd id="mission-summary-energy">0.0%</dd>
-                </div>
-                <div>
-                  <dt>Sobriety</dt>
-                  <dd id="mission-summary-sobriety">+0</dd>
-                </div>
-                <div>
-                  <dt>Collected</dt>
-                  <dd id="mission-summary-collected">0</dd>
-                </div>
-                <div>
-                  <dt>Avoided</dt>
-                  <dd id="mission-summary-avoided">0</dd>
-                </div>
-                <div>
-                  <dt>Missed</dt>
-                  <dd id="mission-summary-missed">0</dd>
-                </div>
-              </dl>
-              <div class="mission-summary-actions">
-                <button id="mission-restart-button" class="button button-primary" type="button">Restart Mission</button>
-              </div>
-            </div>
+        </div>
+        <div class="live-canvas-wrap">
+          <canvas id="truth-canvas" class="live-canvas"></canvas>
+          <div class="panel-canvas-badges">
+            <span class="badge" id="status-badge">Running</span>
+            <span class="badge badge-muted">Full Truth</span>
           </div>
-        </article>
+          <div id="truth-legend" class="panel-canvas-legend"></div>
+        </div>
+      </article>
 
-        <article class="canvas-card radar-card">
-          <canvas id="radar-canvas" width="640" height="720"></canvas>
-          <div class="canvas-overlay">
-            <div class="badge-row">
-              <span class="badge badge-radar">Radar Tracking</span>
-              <span class="badge badge-muted" id="radar-quality-badge">Scan Active</span>
-            </div>
-            <p class="canvas-caption">Ego-centric sensing view. Colored squares are radar measurements, the cross is the estimated state, and the ellipse shows 3 sigma predicted position uncertainty.</p>
+      <article class="panel live-panel live-panel-canvas">
+        <div class="panel-header">
+          <div>
+            <h2>Radar-Accessible Truth</h2>
+            <p class="section-caption">Only the beam and range currently visible to the radar.</p>
           </div>
-        </article>
-      </section>
+        </div>
+        <div class="live-canvas-wrap">
+          <canvas id="radar-truth-canvas" class="live-canvas"></canvas>
+          <div class="panel-canvas-badges">
+            <span class="badge badge-muted">Beam Filter</span>
+            <span class="badge badge-radar" id="radar-quality-badge">Scan Active</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel live-panel live-panel-canvas">
+        <div class="panel-header">
+          <div>
+            <h2>Radar / Tracks</h2>
+            <p class="section-caption">Measured positions, estimated state, and 3 sigma uncertainty.</p>
+          </div>
+        </div>
+        <div class="live-canvas-wrap">
+          <canvas id="radar-canvas" class="live-canvas"></canvas>
+          <div id="radar-legend" class="panel-canvas-legend panel-canvas-legend-radar"></div>
+        </div>
+      </article>
+
+      <article class="panel live-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Radar Log</h2>
+            <p class="section-caption">Latest detections as the beam revisits each object.</p>
+          </div>
+        </div>
+        <div id="radar-log" class="log-list"></div>
+      </article>
+
+      <article class="panel live-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Live Track Metrics</h2>
+            <p class="section-caption">Selected track status and instantaneous tracking details.</p>
+          </div>
+        </div>
+        <div id="track-metrics" class="detail-list"></div>
+      </article>
+
+      <article class="panel live-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Status</h2>
+            <p class="section-caption">Run state, radar settings, controls, and class legend.</p>
+          </div>
+        </div>
+        <div id="status-summary" class="status-grid"></div>
+        <div class="status-columns">
+          <section>
+            <h3>Controls</h3>
+            <ul class="control-list control-list-compact">
+              <li><kbd>Space</kbd> Pause or resume</li>
+              <li><kbd>Tab</kbd> Next selected track</li>
+              <li><kbd>Arrows</kbd> Previous or next selected track</li>
+              <li><kbd>G</kbd> Toggle grid</li>
+              <li><kbd>L</kbd> Toggle labels</li>
+              <li><kbd>V</kbd> Toggle vectors</li>
+              <li><kbd>T</kbd> Toggle trails</li>
+              <li><kbd>R</kbd> Restart run</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Legend</h3>
+            <div id="legend-list" class="legend-list legend-list-compact"></div>
+          </section>
+        </div>
+      </article>
     </main>
-
-    <aside class="sidebar">
-      <section class="panel">
-        <h2>Mission Console</h2>
-        <dl class="stats-grid">
-          <div>
-            <dt>Status</dt>
-            <dd id="stat-status">Running</dd>
-          </div>
-          <div>
-            <dt>Sim Time</dt>
-            <dd id="stat-time">0.0 s</dd>
-          </div>
-          <div>
-            <dt>Frame Rate</dt>
-            <dd id="stat-fps">0 FPS</dd>
-          </div>
-          <div>
-            <dt>Objects</dt>
-            <dd id="stat-objects">0</dd>
-          </div>
-          <div>
-            <dt>World Size</dt>
-            <dd id="stat-world-size">0 x 0</dd>
-          </div>
-          <div>
-            <dt>Scenario</dt>
-            <dd id="stat-scenario">Default</dd>
-          </div>
-          <div>
-            <dt>Mode</dt>
-            <dd id="stat-mode">Player</dd>
-          </div>
-          <div>
-            <dt>Command</dt>
-            <dd id="stat-command">Ready</dd>
-          </div>
-          <div>
-            <dt>Ego State</dt>
-            <dd id="stat-ego-state">Stopped</dd>
-          </div>
-          <div>
-            <dt>Ego Speed</dt>
-            <dd id="stat-ego-speed">0 px/s</dd>
-          </div>
-          <div>
-            <dt>Battery</dt>
-            <dd id="stat-battery">100.0%</dd>
-          </div>
-          <div>
-            <dt>Energy Used</dt>
-            <dd id="stat-energy-used">0.0%</dd>
-          </div>
-          <div>
-            <dt>Collected</dt>
-            <dd id="stat-collected">0</dd>
-          </div>
-          <div>
-            <dt>Avoided</dt>
-            <dd id="stat-avoided">0</dd>
-          </div>
-          <div>
-            <dt>Missed</dt>
-            <dd id="stat-missed">0</dd>
-          </div>
-          <div>
-            <dt>Sobriety</dt>
-            <dd id="stat-sobriety">0</dd>
-          </div>
-          <div>
-            <dt>Score</dt>
-            <dd id="stat-score">0</dd>
-          </div>
-          <div>
-            <dt>Radar Beam</dt>
-            <dd id="stat-radar-angle">0 deg</dd>
-          </div>
-          <div>
-            <dt>Detections</dt>
-            <dd id="stat-radar-detections">0</dd>
-          </div>
-        </dl>
-      </section>
-
-      <details class="panel accordion" open>
-        <summary>Legend</summary>
-        <div id="legend-list" class="legend-list"></div>
-      </details>
-
-      <details class="panel accordion">
-        <summary>Entities</summary>
-        <div id="entity-list" class="entity-list"></div>
-      </details>
-
-      <details class="panel accordion" open>
-        <summary>Tracks</summary>
-        <div id="track-list" class="entity-list"></div>
-      </details>
-
-      <details class="panel accordion">
-        <summary>Controls</summary>
-        <ul class="control-list">
-          <li><kbd>Mode</kbd> Start in Player, switch to Greedy anytime</li>
-          <li><kbd>Arrows</kbd> One press = 20 px/s, twice = 40, three times = 80</li>
-          <li>Opposite direction stops the ego on the next allowed command</li>
-          <li>One piloting action is allowed every 1 second</li>
-          <li>Greedy avoids nearby dangerous debris, then chases the closest collectable</li>
-          <li>Battery drain exists even at rest, with an extra cost that scales with speed squared</li>
-          <li>Mission score = collected points - missed threats + sobriety bonus</li>
-          <li>Radar view is ego-centric and displays noisy sensing plus estimated tracks</li>
-          <li>Classification is simulated from object size and observation quality, separate from tracking</li>
-          <li><kbd>Space</kbd> Pause / resume</li>
-          <li><kbd>G</kbd> Toggle grid</li>
-          <li><kbd>L</kbd> Toggle labels</li>
-          <li><kbd>V</kbd> Toggle vectors</li>
-          <li><kbd>T</kbd> Toggle trails</li>
-          <li><kbd>R</kbd> Restart mission</li>
-        </ul>
-      </details>
-    </aside>
   </div>
 
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=2026-04-24-live-demo-v4"></script>
 </body>
 </html>

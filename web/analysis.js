@@ -1,5 +1,5 @@
 const DATA_ROOT = "./data/analysis/analysis_v1";
-const DATA_VERSION = "2026-04-22-analysis-physical";
+const DATA_VERSION = "2026-04-23-analysis-radar-precision-v4";
 
 const state = {
   manifest: null,
@@ -22,10 +22,12 @@ const state = {
   trajectory: {
     coefficientA: "auto",
     scanRateA: "auto",
+    bearingA: "auto",
     seedA: "auto",
     objectA: "auto",
     coefficientB: "none",
     scanRateB: "auto",
+    bearingB: "auto",
     seedB: "auto",
     objectB: "none",
   },
@@ -59,6 +61,7 @@ const RUN_TABLE_COLUMNS = [
   { key: "variant_name", label: "Run", type: "text" },
   { key: "coefficient", label: "Non-Linearity", type: "number", digits: 2, unit: "" },
   { key: "scan_rate_deg_s", label: "Scan Rate", type: "number", digits: 1, unit: "deg/s" },
+  { key: "bearing_noise_factor", label: "Radar Precision", type: "number", digits: 2, unit: "x" },
   { key: "seed", label: "Seed", type: "number", digits: 0, unit: "" },
   { key: "max_acceleration", label: "Max Accel", type: "number", digits: 4, unit: "m/s^2" },
   { key: "total_detections", label: "Detections", type: "number", digits: 0, unit: "" },
@@ -74,6 +77,11 @@ function formatNumber(value, digits = 2) {
 function mean(values) {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function rmse(values) {
+  if (!values.length) return 0;
+  return Math.sqrt(values.reduce((sum, value) => sum + value * value, 0) / values.length);
 }
 
 function median(values) {
@@ -105,6 +113,8 @@ function flattenDetectionRows(entries) {
         variant_name: entry.variant_name,
         coefficient: entry.coefficient,
         scan_rate_deg_s: entry.scan_rate_deg_s,
+        bearing_noise_factor: entry.bearing_noise_factor,
+        bearing_noise_std_deg: entry.bearing_noise_std_deg,
         seed: entry.seed,
         object_name: entry.object_name,
         true_category: entry.true_category,
@@ -124,6 +134,57 @@ function flattenDetectionRows(entries) {
     }
   }
   return rows;
+}
+
+function trajectoryKey(baseScenario, variantName, objectName) {
+  return `${baseScenario}::${variantName}::${objectName}`;
+}
+
+function hasWrappedTruth(entry) {
+  if (!entry || !entry.truth_path || entry.truth_path.length < 2) {
+    return false;
+  }
+  const jumpThreshold = Math.max(180, Number(entry.radar_max_range ?? 0) * 0.9);
+  for (let i = 1; i < entry.truth_path.length; i += 1) {
+    const previous = entry.truth_path[i - 1];
+    const current = entry.truth_path[i];
+    if (Math.abs(current.x - previous.x) > jumpThreshold || Math.abs(current.y - previous.y) > jumpThreshold) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function wrappedTrajectoryKeys() {
+  const keys = new Set();
+  for (const entry of state.objectTrajectories) {
+    if (hasWrappedTruth(entry)) {
+      keys.add(trajectoryKey(entry.base_scenario, entry.variant_name, entry.object_name));
+    }
+  }
+  return keys;
+}
+
+function truthSegmentsInRadarRange(entry) {
+  if (!entry) return [];
+  const maxRange = Number(entry.radar_max_range ?? Number.POSITIVE_INFINITY);
+  const segments = [];
+  let currentSegment = [];
+  for (const point of entry.truth_path) {
+    const inRange = Math.hypot(point.x, point.y) <= maxRange + 1e-6;
+    if (inRange) {
+      currentSegment.push(point);
+      continue;
+    }
+    if (currentSegment.length) {
+      segments.push(currentSegment);
+      currentSegment = [];
+    }
+  }
+  if (currentSegment.length) {
+    segments.push(currentSegment);
+  }
+  return segments;
 }
 
 function categoryLabel(category) {
@@ -171,8 +232,8 @@ function setSelectOptions(select, values, formatter = (value) => value, firstLab
   }
 }
 
-function setTrajectorySelectOptions(select, values, mode, kind = "object") {
-  const current = select.value;
+function setTrajectorySelectOptions(select, values, mode, kind = "object", selectedValue = null, formatter = (value) => value) {
+  const current = selectedValue === null || selectedValue === undefined ? select.value : String(selectedValue);
   select.innerHTML = "";
   const defaults = [];
   if (mode === "a") {
@@ -194,7 +255,7 @@ function setTrajectorySelectOptions(select, values, mode, kind = "object") {
   for (const value of values) {
     const option = document.createElement("option");
     option.value = String(value);
-    option.textContent = value;
+    option.textContent = formatter(value);
     select.append(option);
   }
   if ([...select.options].some((option) => option.value === current)) {
@@ -223,6 +284,14 @@ function formatRunCell(row, column) {
   return String(value);
 }
 
+function formatBearingFactor(value) {
+  const numeric = Number(value);
+  if (numeric === 0.5) return "0.5x noise";
+  if (numeric === 1) return "nominal";
+  if (numeric === 2) return "2x noise";
+  return `${formatNumber(numeric, 2)}x noise`;
+}
+
 function rowMatchesGlobalFilter(row) {
   if (state.filters.scenario !== "all" && row.base_scenario !== state.filters.scenario) {
     return false;
@@ -248,6 +317,9 @@ function rowMatchesGlobalFilter(row) {
 function trajectoryRowsForContext() {
   return state.objectTrajectories.filter((row) => {
     if (state.filters.scenario !== "all" && row.base_scenario !== state.filters.scenario) {
+      return false;
+    }
+    if (hasWrappedTruth(row)) {
       return false;
     }
     return true;
@@ -298,6 +370,33 @@ function valueOrAuto(selected, fallback) {
   return selected === "auto" ? fallback : selected;
 }
 
+function validTrajectoryEntries() {
+  return state.objectTrajectories.filter((entry) => !hasWrappedTruth(entry));
+}
+
+function applyTrajectoryEntry(entry, suffix) {
+  if (!entry) return;
+  state.trajectory[`coefficient${suffix}`] = String(entry.coefficient);
+  state.trajectory[`scanRate${suffix}`] = String(entry.scan_rate_deg_s);
+  state.trajectory[`bearing${suffix}`] = String(entry.bearing_noise_factor ?? 1);
+  state.trajectory[`seed${suffix}`] = String(entry.seed);
+  state.trajectory[`object${suffix}`] = entry.object_name;
+}
+
+function initializeTrajectoryDefaults() {
+  const entries = validTrajectoryEntries()
+    .filter((entry) => entry.detection_count > 0)
+    .filter((entry) => Number.isFinite(Number(entry.post_update_position_rmse_after_init)))
+    .filter((entry) => Number(entry.post_update_position_rmse_after_init) > 0);
+  if (!entries.length) return;
+  const sorted = [...entries].sort(
+    (left, right) => left.post_update_position_rmse_after_init - right.post_update_position_rmse_after_init,
+  );
+  applyTrajectoryEntry(sorted[0], "A");
+  state.trajectory.coefficientB = String(sorted[sorted.length - 1].coefficient);
+  applyTrajectoryEntry(sorted[sorted.length - 1], "B");
+}
+
 function pickTrajectoryEntries() {
   const rows = trajectoryRowsForContext();
   const coefficients = [...new Set(rows.map((row) => String(row.coefficient)))].sort((a, b) => Number(a) - Number(b));
@@ -311,10 +410,13 @@ function pickTrajectoryEntries() {
   const fallbackScanA = state.filters.scanRate !== "all" ? state.filters.scanRate : scanRatesA[0] ?? "auto";
   const selectedScanA = valueOrAuto(state.trajectory.scanRateA, fallbackScanA);
   const rowsForScanA = rowsForCoefA.filter((row) => String(row.scan_rate_deg_s) === String(selectedScanA));
-  const seedsA = [...new Set(rowsForScanA.map((row) => String(row.seed)))].sort((a, b) => Number(a) - Number(b));
+  const bearingFactorsA = [...new Set(rowsForScanA.map((row) => String(row.bearing_noise_factor)))].sort((a, b) => Number(a) - Number(b));
+  const selectedBearingA = valueOrAuto(state.trajectory.bearingA, bearingFactorsA.includes("1") ? "1" : bearingFactorsA[0] ?? "auto");
+  const rowsForBearingA = rowsForScanA.filter((row) => String(row.bearing_noise_factor) === String(selectedBearingA));
+  const seedsA = [...new Set(rowsForBearingA.map((row) => String(row.seed)))].sort((a, b) => Number(a) - Number(b));
   const fallbackSeedA = state.filters.seed !== "all" ? state.filters.seed : seedsA[0] ?? "auto";
   const selectedSeedA = valueOrAuto(state.trajectory.seedA, fallbackSeedA);
-  const rowsForSeedA = rowsForScanA.filter((row) => String(row.seed) === String(selectedSeedA));
+  const rowsForSeedA = rowsForBearingA.filter((row) => String(row.seed) === String(selectedSeedA));
   const objectNamesA = [...new Set(rowsForSeedA.map((row) => row.object_name))].sort();
   const selectedObjectA = valueOrAuto(state.trajectory.objectA, chooseDefaultObject(rowsForSeedA));
 
@@ -324,9 +426,12 @@ function pickTrajectoryEntries() {
   const scanRatesB = [...new Set(rowsForCoefB.map((row) => String(row.scan_rate_deg_s)))].sort((a, b) => Number(a) - Number(b));
   const selectedScanB = enabledB ? valueOrAuto(state.trajectory.scanRateB, scanRatesB[0] ?? "auto") : null;
   const rowsForScanB = enabledB ? rowsForCoefB.filter((row) => String(row.scan_rate_deg_s) === String(selectedScanB)) : [];
-  const seedsB = [...new Set(rowsForScanB.map((row) => String(row.seed)))].sort((a, b) => Number(a) - Number(b));
+  const bearingFactorsB = [...new Set(rowsForScanB.map((row) => String(row.bearing_noise_factor)))].sort((a, b) => Number(a) - Number(b));
+  const selectedBearingB = enabledB ? valueOrAuto(state.trajectory.bearingB, bearingFactorsB.includes("1") ? "1" : bearingFactorsB[0] ?? "auto") : null;
+  const rowsForBearingB = enabledB ? rowsForScanB.filter((row) => String(row.bearing_noise_factor) === String(selectedBearingB)) : [];
+  const seedsB = [...new Set(rowsForBearingB.map((row) => String(row.seed)))].sort((a, b) => Number(a) - Number(b));
   const selectedSeedB = enabledB ? valueOrAuto(state.trajectory.seedB, seedsB[0] ?? "auto") : null;
-  const rowsForSeedB = enabledB ? rowsForScanB.filter((row) => String(row.seed) === String(selectedSeedB)) : [];
+  const rowsForSeedB = enabledB ? rowsForBearingB.filter((row) => String(row.seed) === String(selectedSeedB)) : [];
   const objectNamesB = [...new Set(rowsForSeedB.map((row) => row.object_name))].sort();
   const selectedObjectB = enabledB ? valueOrAuto(state.trajectory.objectB, chooseDefaultObject(rowsForSeedB)) : null;
 
@@ -335,9 +440,11 @@ function pickTrajectoryEntries() {
     availableScanRates: scanRates,
     availableSeeds: seeds,
     availableScanRatesA: scanRatesA,
+    availableBearingFactorsA: bearingFactorsA,
     availableSeedsA: seedsA,
     availableObjectsA: objectNamesA,
     availableScanRatesB: scanRatesB,
+    availableBearingFactorsB: bearingFactorsB,
     availableSeedsB: seedsB,
     availableObjectsB: objectNamesB,
     trackA: rowsForSeedA.find((row) => row.object_name === selectedObjectA) ?? null,
@@ -390,6 +497,7 @@ function renderOverview() {
     <div><dt>Scenarios</dt><dd>${state.overview.experiment.base_scenarios.join(", ")}</dd></div>
     <div><dt>Coefficients</dt><dd>${state.overview.experiment.coefficients.join(", ")}</dd></div>
     <div><dt>Scan rates</dt><dd>${state.overview.experiment.scan_rates_deg_s.map((value) => `${formatNumber(value, 1)} deg/s`).join(", ")}</dd></div>
+    <div><dt>Radar precision</dt><dd>${(state.overview.experiment.bearing_noise_factors ?? [1]).map(formatBearingFactor).join(", ")}</dd></div>
     <div><dt>Seeds</dt><dd>${state.overview.experiment.seeds.join(", ")}</dd></div>
     <div><dt>Total detections</dt><dd>${state.overview.experiment.total_detections}</dd></div>
     <div><dt>Total samples</dt><dd>${state.overview.experiment.total_samples}</dd></div>
@@ -436,151 +544,290 @@ function renderRunTableControls() {
 function renderGuidedObservations() {
   const grid = document.getElementById("guided-observation-grid");
   const notes = document.getElementById("guided-observation-notes");
-  const filteredRuns = state.runs.filter((row) => rowMatchesGlobalFilter(row));
-  const filteredDetectionRows = state.detectionRows.filter((row) => rowMatchesGlobalFilter(row));
+  const wrappedKeys = wrappedTrajectoryKeys();
+  const filteredEntries = state.objectTrajectories.filter((entry) => {
+    if (state.filters.scenario !== "all" && entry.base_scenario !== state.filters.scenario) {
+      return false;
+    }
+    if (state.filters.coefficient !== "all" && String(entry.coefficient) !== state.filters.coefficient) {
+      return false;
+    }
+    if (state.filters.scanRate !== "all" && String(entry.scan_rate_deg_s) !== state.filters.scanRate) {
+      return false;
+    }
+    if (state.filters.seed !== "all" && String(entry.seed) !== state.filters.seed) {
+      return false;
+    }
+    if (state.filters.objectName !== "all" && entry.object_name !== state.filters.objectName) {
+      return false;
+    }
+    if (state.filters.category !== "all" && entry.true_category !== state.filters.category) {
+      return false;
+    }
+    return !hasWrappedTruth(entry);
+  });
+  const filteredRuns = state.runs
+    .filter((row) => rowMatchesGlobalFilter(row))
+    .filter((row) => Number.isFinite(Number(row.post_update_position_rmse_after_init)))
+    .filter((row) => Number(row.post_update_position_rmse_after_init) > 0);
+  const filteredDetectionRows = state.detectionRows.filter((row) => {
+    if (!rowMatchesGlobalFilter(row)) {
+      return false;
+    }
+    return !wrappedKeys.has(trajectoryKey(row.base_scenario, row.variant_name, row.object_name));
+  });
 
   grid.innerHTML = "";
   notes.innerHTML = "";
 
-  if (!filteredRuns.length) {
+  if (!filteredEntries.length) {
     grid.innerHTML = `<article class="guided-observation-card"><h3>No filtered runs</h3><p>Adjust the filters to reveal at least one run.</p></article>`;
     return;
   }
 
-  const bestRun = [...filteredRuns].sort((left, right) => left.post_update_position_rmse_after_init - right.post_update_position_rmse_after_init)[0];
-  const worstRun = [...filteredRuns].sort((left, right) => right.post_update_position_rmse_after_init - left.post_update_position_rmse_after_init)[0];
-
-  const byCoefficient = new Map();
-  for (const row of filteredRuns) {
-    const bucket = byCoefficient.get(row.coefficient) ?? [];
-    bucket.push(row);
-    byCoefficient.set(row.coefficient, bucket);
+  const afterInitRows = filteredDetectionRows.filter((row) => row.detection_index >= 5);
+  const runRmse = (rows) => rmse(rows.map((row) => row.position_error));
+  const meanRunRmse5Plus = (rows) => mean(rows.map((row) => row.post_update_position_rmse_after_init));
+  const meanEntryRmse5Plus = (rows) => mean(rows.map((row) => row.post_update_position_rmse_after_init));
+  const runGroups = new Map();
+  for (const entry of filteredEntries) {
+    const group = runGroups.get(entry.variant_name) ?? [];
+    group.push(entry);
+    runGroups.set(entry.variant_name, group);
   }
-  const coefficientRows = [...byCoefficient.entries()]
-    .map(([coefficient, rows]) => ({
-      coefficient,
-      rmseAfterInit: mean(rows.map((row) => row.post_update_position_rmse_after_init)),
-      detections: mean(rows.map((row) => row.total_detections)),
+  const runSummaries = [...runGroups.entries()]
+    .map(([variantName, entries]) => ({
+      variantName,
+      rmse: meanEntryRmse5Plus(entries),
     }))
-    .sort((left, right) => left.coefficient - right.coefficient);
+    .filter((row) => row.rmse > 0)
+    .sort((left, right) => left.rmse - right.rmse);
+  const bestValidRun = runSummaries[0] ?? null;
+  const worstValidRun = runSummaries[runSummaries.length - 1] ?? null;
 
-  const byScan = new Map();
-  for (const row of filteredRuns) {
-    const bucket = byScan.get(row.scan_rate_deg_s) ?? [];
-    bucket.push(row);
-    byScan.set(row.scan_rate_deg_s, bucket);
-  }
-  const scanRows = [...byScan.entries()]
-    .map(([scanRate, rows]) => ({
-      scanRate,
-      rmseAfterInit: mean(rows.map((row) => row.post_update_position_rmse_after_init)),
-      detections: mean(rows.map((row) => row.total_detections)),
-    }))
-    .sort((left, right) => left.scanRate - right.scanRate);
+  const linearDetectionRows = filteredDetectionRows.filter((row) => Number(row.coefficient) === 0.0);
+  const bucket12Rows = linearDetectionRows.filter((row) => row.detection_index >= 1 && row.detection_index <= 2);
+  const bucket34Rows = linearDetectionRows.filter((row) => row.detection_index >= 3 && row.detection_index <= 4);
+  const bucket5PlusRows = linearDetectionRows.filter((row) => row.detection_index >= 5);
+  const bucket12Rmse = runRmse(bucket12Rows);
+  const bucket34Rmse = runRmse(bucket34Rows);
+  const bucket5PlusRmse = runRmse(bucket5PlusRows);
 
-  const bySeed = new Map();
-  for (const row of filteredRuns) {
-    const bucket = bySeed.get(row.seed) ?? [];
-    bucket.push(row);
-    bySeed.set(row.seed, bucket);
-  }
-  const seedRows = [...bySeed.entries()]
-    .map(([seed, rows]) => ({
+  const accelRmse = (coefficient) => meanRunRmse5Plus(
+    filteredEntries.filter((row) => Number(row.coefficient) === coefficient),
+  );
+  const scanRmse = (scanRate) => meanRunRmse5Plus(
+    filteredEntries.filter((row) => Number(row.scan_rate_deg_s) === scanRate),
+  );
+  const bearingRmse = (bearingFactor) => meanEntryRmse5Plus(
+    filteredEntries.filter((row) => Number(row.bearing_noise_factor ?? 1) === bearingFactor),
+  );
+  const seedRmseRows = [...new Set(filteredRuns.map((row) => Number(row.seed)))]
+    .sort((a, b) => a - b)
+    .map((seed) => ({
       seed,
-      rmseAfterInit: mean(rows.map((row) => row.post_update_position_rmse_after_init)),
-    }))
-    .sort((left, right) => left.seed - right.seed);
+      rmse: mean(filteredRuns
+        .filter((row) => Number(row.seed) === seed)
+        .map((row) => Number(row.post_update_position_rmse_after_init))),
+    }));
+  const batchSeedReferenceRmse = mean(filteredRuns.map((row) => Number(row.post_update_position_rmse_after_init)));
+  const bestSeed = seedRmseRows.length
+    ? [...seedRmseRows].sort((left, right) => left.rmse - right.rmse)[0]
+    : null;
+  const worstSeed = seedRmseRows.length
+    ? [...seedRmseRows].sort((left, right) => right.rmse - left.rmse)[0]
+    : null;
+  const nominalAccelRmse = accelRmse(0.5);
+  const lowAccelRmse = accelRmse(0.0);
+  const highAccelRmse = accelRmse(1.0);
+  const nominalScanRmse = scanRmse(40.0);
+  const lowScanRmse = scanRmse(20.0);
+  const highScanRmse = scanRmse(80.0);
+  const highPrecisionBearingRmse = bearingRmse(0.5);
+  const nominalBearingRmse = bearingRmse(1.0);
+  const lowPrecisionBearingRmse = bearingRmse(2.0);
 
-  const earlyMean = mean(
-    filteredDetectionRows
-      .filter((row) => row.detection_index === 1)
-      .map((row) => row.position_error),
-  );
-  const lateMean = mean(
-    filteredDetectionRows
-      .filter((row) => row.detection_index >= 5)
-      .map((row) => row.position_error),
-  );
-  const convergenceGain = earlyMean > 0 ? ((earlyMean - lateMean) / earlyMean) * 100 : 0;
-
-  const stabilizedRangeRows = filteredDetectionRows
-    .filter((row) => row.detection_index >= 5)
+  const rangeAnalysisCoefficient = 0.5;
+  const rangeRows = afterInitRows
+    .filter((row) => Number(row.coefficient) === rangeAnalysisCoefficient)
     .slice()
     .sort((left, right) => left.range - right.range);
-  const splitIndex = Math.floor(stabilizedRangeRows.length / 2);
-  const nearRows = stabilizedRangeRows.slice(0, splitIndex);
-  const farRows = stabilizedRangeRows.slice(splitIndex);
-  const nearMean = mean(nearRows.map((row) => row.position_error));
-  const farMean = mean(farRows.map((row) => row.position_error));
-  const nearRangeAvg = mean(nearRows.map((row) => row.range));
-  const farRangeAvg = mean(farRows.map((row) => row.range));
+  const third = Math.floor(rangeRows.length / 3);
+  const closeRows = rangeRows.slice(0, third);
+  const midRows = rangeRows.slice(third, rangeRows.length - third);
+  const farRows = rangeRows.slice(rangeRows.length - third);
+  const closeRmse = runRmse(closeRows);
+  const midRmse = runRmse(midRows);
+  const farRmse = runRmse(farRows);
+  const closeRange = mean(closeRows.map((row) => row.range));
+  const midRange = mean(midRows.map((row) => row.range));
+  const farRange = mean(farRows.map((row) => row.range));
 
-  const nonLinearityDelta = coefficientRows.length >= 2
-    ? coefficientRows[coefficientRows.length - 1].rmseAfterInit - coefficientRows[0].rmseAfterInit
-    : 0;
-  const scanDelta = scanRows.length >= 2
-    ? scanRows[0].rmseAfterInit - scanRows[scanRows.length - 1].rmseAfterInit
-    : 0;
-  const seedSpread = seedRows.length >= 2
-    ? Math.max(...seedRows.map((row) => row.rmseAfterInit)) - Math.min(...seedRows.map((row) => row.rmseAfterInit))
-    : 0;
+  const deltaText = (value, reference) => {
+    const delta = value - reference;
+    return `${delta >= 0 ? "+" : ""}${formatNumber(delta, 2)} m`;
+  };
 
-  const cards = [
-    {
-      title: "Best run after initialization",
-      value: `${formatNumber(bestRun.post_update_position_rmse_after_init, 2)} m`,
-      body: `${formatVariantName(bestRun.variant_name)} delivers the lowest post-init position RMSE in the current selection.`,
-    },
-    {
-      title: "Filter convergence after 5 detections",
-      value: `${formatNumber(convergenceGain, 1)}%`,
-      body: `Mean position error from detection 1 to detection 5+ (${formatNumber(earlyMean, 2)} m -> ${formatNumber(lateMean, 2)} m).`,
-    },
-    {
-      title: "Non-linearity effect on RMSE",
-      value: `${formatNumber(nonLinearityDelta, 2)} m`,
-      body: coefficientRows.length >= 2
-        ? `Change in post-init position RMSE from accel level ${formatNumber(coefficientRows[0].coefficient, 2)} to ${formatNumber(coefficientRows[coefficientRows.length - 1].coefficient, 2)}.`
-        : "Need multiple coefficient levels in the current filter.",
-    },
-    {
-      title: "Radar revisit effect on RMSE",
-      value: `${formatNumber(scanDelta, 2)} m`,
-      body: scanRows.length >= 2
-        ? `Post-init position RMSE difference from ${formatNumber(scanRows[0].scanRate, 1)} to ${formatNumber(scanRows[scanRows.length - 1].scanRate, 1)} deg/s.`
-        : "Need multiple scan rates in the current filter.",
-    },
-    {
-      title: "Seed spread",
-      value: `${formatNumber(seedSpread, 2)} m`,
-      body: `Spread of post-init position RMSE across seeds in the current selection.`,
-    },
-    {
-      title: "Range effect on error",
-      value: farRows.length && nearRows.length ? `${farMean >= nearMean ? "+" : ""}${formatNumber(farMean - nearMean, 2)} m` : "n/a",
-      body: farRows.length && nearRows.length
-        ? `Mean position error from avg ${formatNumber(nearRangeAvg, 1)} m to avg ${formatNumber(farRangeAvg, 1)} m (${formatNumber(nearMean, 2)} m -> ${formatNumber(farMean, 2)} m).`
-        : "Not enough 5+ detections to compare near and far populations.",
-    },
+  const trendRows = [
+    [
+      {
+        title: "Filter init: detections 1-2",
+        value: bucket34Rows.length ? `${bucket12Rmse >= bucket34Rmse ? "+" : ""}${formatNumber(bucket12Rmse - bucket34Rmse, 2)} m` : "n/a",
+        body: `Linear cases only (accel 0.00). RMSE over bucket 1-2: ${formatNumber(bucket12Rmse, 2)} m.`,
+        rmseValue: bucket12Rmse,
+      },
+      {
+        title: "Filter init: detections 3-4",
+        value: `${formatNumber(bucket34Rmse, 2)} m`,
+        body: "Linear cases only (accel 0.00). Reference bucket before the stabilized 5+ regime.",
+        emphasis: true,
+        rmseValue: bucket34Rmse,
+      },
+      {
+        title: "Filter stabilized: detections 5+",
+        value: bucket34Rows.length ? `${bucket5PlusRmse >= bucket34Rmse ? "+" : ""}${formatNumber(bucket5PlusRmse - bucket34Rmse, 2)} m` : "n/a",
+        body: `Linear cases only (accel 0.00). RMSE over bucket 5+: ${formatNumber(bucket5PlusRmse, 2)} m.`,
+        rmseValue: bucket5PlusRmse,
+      },
+    ],
+    [
+      {
+        title: "No acceleration",
+        value: nominalAccelRmse ? deltaText(lowAccelRmse, nominalAccelRmse) : "n/a",
+        body: `Mean run RMSE 5+ at accel 0.00 versus nominal 0.50. RMSE ${formatNumber(lowAccelRmse, 2)} m.`,
+        rmseValue: lowAccelRmse,
+      },
+      {
+        title: "Nominal acceleration",
+        value: `${formatNumber(nominalAccelRmse, 2)} m`,
+        body: "Reference case: mean run RMSE 5+ at accel level 0.50.",
+        emphasis: true,
+        rmseValue: nominalAccelRmse,
+      },
+      {
+        title: "Double acceleration",
+        value: nominalAccelRmse ? deltaText(highAccelRmse, nominalAccelRmse) : "n/a",
+        body: `Mean run RMSE 5+ at accel 1.00 versus nominal 0.50. RMSE ${formatNumber(highAccelRmse, 2)} m.`,
+        rmseValue: highAccelRmse,
+      },
+    ],
+    [
+      {
+        title: "Slow radar revisit",
+        value: nominalScanRmse ? deltaText(lowScanRmse, nominalScanRmse) : "n/a",
+        body: `Mean run RMSE 5+ at 20 deg/s versus nominal 40 deg/s. RMSE ${formatNumber(lowScanRmse, 2)} m.`,
+        rmseValue: lowScanRmse,
+      },
+      {
+        title: "Nominal radar revisit",
+        value: `${formatNumber(nominalScanRmse, 2)} m`,
+        body: "Reference case: mean run RMSE 5+ at 40 deg/s.",
+        emphasis: true,
+        rmseValue: nominalScanRmse,
+      },
+      {
+        title: "Fast radar revisit",
+        value: nominalScanRmse ? deltaText(highScanRmse, nominalScanRmse) : "n/a",
+        body: `Mean run RMSE 5+ at 80 deg/s versus nominal 40 deg/s. RMSE ${formatNumber(highScanRmse, 2)} m.`,
+        rmseValue: highScanRmse,
+      },
+    ],
+    [
+      {
+        title: `Best seed${bestSeed ? ` ${bestSeed.seed}` : ""}`,
+        value: bestSeed && batchSeedReferenceRmse ? deltaText(bestSeed.rmse, batchSeedReferenceRmse) : "n/a",
+        body: bestSeed && batchSeedReferenceRmse
+          ? `Mean run RMSE 5+ for this seed: ${formatNumber(bestSeed.rmse, 2)} m. Compared with batch mean.`
+          : "Need seed sweep data.",
+        rmseValue: bestSeed?.rmse ?? 0,
+      },
+      {
+        title: "Batch mean RMSE",
+        value: batchSeedReferenceRmse ? `${formatNumber(batchSeedReferenceRmse, 2)} m` : "n/a",
+        body: "Reference over all filtered runs. Seed cards show their delta to this baseline.",
+        emphasis: true,
+        rmseValue: batchSeedReferenceRmse ?? 0,
+      },
+      {
+        title: `Worst seed${worstSeed ? ` ${worstSeed.seed}` : ""}`,
+        value: worstSeed && batchSeedReferenceRmse ? deltaText(worstSeed.rmse, batchSeedReferenceRmse) : "n/a",
+        body: worstSeed
+          ? `Mean run RMSE 5+ for this seed: ${formatNumber(worstSeed.rmse, 2)} m. Compared with batch mean.`
+          : "Need seed sweep data.",
+        rmseValue: worstSeed?.rmse ?? 0,
+      },
+    ],
+    [
+      {
+        title: "High radar precision",
+        value: nominalBearingRmse ? deltaText(highPrecisionBearingRmse, nominalBearingRmse) : "n/a",
+        body: `Radar range and bearing noise /2. Mean RMSE 5+: ${formatNumber(highPrecisionBearingRmse, 2)} m.`,
+        rmseValue: highPrecisionBearingRmse,
+      },
+      {
+        title: "Nominal radar precision",
+        value: `${formatNumber(nominalBearingRmse, 2)} m`,
+        body: "Reference case: nominal radar range and bearing noise.",
+        emphasis: true,
+        rmseValue: nominalBearingRmse,
+      },
+      {
+        title: "Low radar precision",
+        value: nominalBearingRmse ? deltaText(lowPrecisionBearingRmse, nominalBearingRmse) : "n/a",
+        body: `Radar range and bearing noise x2. Mean RMSE 5+: ${formatNumber(lowPrecisionBearingRmse, 2)} m.`,
+        rmseValue: lowPrecisionBearingRmse,
+      },
+    ],
+    [
+      {
+        title: "Close objects",
+        value: midRmse ? deltaText(closeRmse, midRmse) : "n/a",
+        body: `Accel ${formatNumber(rangeAnalysisCoefficient, 2)} only. Avg range ${formatNumber(closeRange, 1)} m. RMSE ${formatNumber(closeRmse, 2)} m.`,
+        rmseValue: closeRmse,
+      },
+      {
+        title: "Mid-range objects",
+        value: `${formatNumber(midRmse, 2)} m`,
+        body: `Accel ${formatNumber(rangeAnalysisCoefficient, 2)} only. Reference population. Avg range ${formatNumber(midRange, 1)} m.`,
+        emphasis: true,
+        rmseValue: midRmse,
+      },
+      {
+        title: "Far objects",
+        value: midRmse ? deltaText(farRmse, midRmse) : "n/a",
+        body: `Accel ${formatNumber(rangeAnalysisCoefficient, 2)} only. Avg range ${formatNumber(farRange, 1)} m. RMSE ${formatNumber(farRmse, 2)} m.`,
+        rmseValue: farRmse,
+      },
+    ],
   ];
 
-  for (const card of cards) {
-    const article = document.createElement("article");
-    article.className = "guided-observation-card";
-    article.innerHTML = `
-      <h3>${card.title}</h3>
-      <p class="guided-observation-value">${card.value}</p>
-      <p class="guided-observation-body">${card.body}</p>
-    `;
-    grid.append(article);
+  for (const row of trendRows) {
+    const candidates = row.filter((card) => Number.isFinite(card.rmseValue) && card.rmseValue > 0);
+    const bestRmse = candidates.length ? Math.min(...candidates.map((card) => card.rmseValue)) : null;
+    for (const card of row) {
+      const article = document.createElement("article");
+      const isBest = bestRmse !== null && Math.abs(card.rmseValue - bestRmse) < 1e-9;
+      article.className = `guided-observation-card${card.emphasis ? " guided-observation-card-emphasis" : ""}${isBest ? " guided-observation-card-best" : ""}`;
+      article.innerHTML = `
+        <h3>${card.title}</h3>
+        <p class="guided-observation-value">${card.value}</p>
+        <p class="guided-observation-body">${card.body}</p>
+      `;
+      grid.append(article);
+    }
   }
 
   const commentLines = [
-    `Best filtered run: ${formatVariantName(bestRun.variant_name)}. Worst filtered run: ${formatVariantName(worstRun.variant_name)} (${formatNumber(worstRun.post_update_position_rmse_after_init, 2)} m after initialization).`,
-    coefficientRows.length >= 2
-      ? `Across the selected runs, non-linearity changes after-init position RMSE by ${formatNumber(nonLinearityDelta, 2)} m, while scan-rate changes it by ${formatNumber(scanDelta, 2)} m.`
-      : "The current filter fixes non-linearity, so the coefficient effect cannot be compared here.",
-    `Filter convergence from detection 1 to 5+ is ${formatNumber(earlyMean, 2)} m -> ${formatNumber(lateMean, 2)} m. Seed spread is ${formatNumber(seedSpread, 2)} m.`,
+    bestValidRun && worstValidRun
+      ? `Best valid run: ${formatVariantName(bestValidRun.variantName)} (${formatNumber(bestValidRun.rmse, 2)} m). Worst valid run: ${formatVariantName(worstValidRun.variantName)} (${formatNumber(worstValidRun.rmse, 2)} m).`
+      : "Best/worst valid run cannot be computed for the current selection.",
+    `The first row isolates filter convergence on linear cases only: accel 0.00 with three detection regimes 1-2, 3-4, and 5+.`,
+    `Acceleration and scan-rate trends use mean run RMSE 5+ values, not raw detection errors.`,
+    `Acceleration trend is centered on the nominal accel level 0.50; scan-rate trend is centered on 40 deg/s.`,
+    `Seed trend compares mean run RMSE 5+ by seed against the filtered batch mean.`,
+    `Radar precision trend compares half, nominal, and double range/bearing measurement noise.`,
+    `Range trend uses accel ${formatNumber(rangeAnalysisCoefficient, 2)} cases only, then splits selected detections into close, mid-range, and far thirds before computing position RMSE.`,
+    `Wrapped trajectories are excluded from these observations.`,
   ];
 
   for (const line of commentLines) {
@@ -598,6 +845,7 @@ function renderRuns() {
       formatVariantName(row.variant_name),
       String(row.coefficient),
       String(row.scan_rate_deg_s),
+      String(row.bearing_noise_factor ?? 1),
       String(row.seed),
     ].join(" ").toLowerCase().includes(term);
   });
@@ -623,12 +871,13 @@ function renderRuns() {
     item.className = "run-list-item";
     item.innerHTML = `
       <span class="run-list-title">${formatVariantName(row.variant_name)}</span>
-      <span class="run-list-meta">coef ${formatNumber(row.coefficient, 2)} | ${formatNumber(row.scan_rate_deg_s, 1)} deg/s | seed ${row.seed}</span>
+      <span class="run-list-meta">coef ${formatNumber(row.coefficient, 2)} | ${formatNumber(row.scan_rate_deg_s, 1)} deg/s | ${formatBearingFactor(row.bearing_noise_factor ?? 1)} | seed ${row.seed}</span>
       <span class="run-list-metrics">RMSE 5+: ${formatNumber(row.post_update_position_rmse_after_init, 2)} m | detections: ${row.total_detections}</span>
     `;
     item.addEventListener("click", () => {
       state.trajectory.coefficientA = String(row.coefficient);
       state.trajectory.scanRateA = String(row.scan_rate_deg_s);
+      state.trajectory.bearingA = String(row.bearing_noise_factor ?? 1);
       state.trajectory.seedA = String(row.seed);
       state.trajectory.objectA = "auto";
       renderAll();
@@ -681,29 +930,35 @@ function renderDataDetails() {
 function updateTrajectorySelectors() {
   const coeffASelect = document.getElementById("trajectory-coeff-a");
   const scanASelect = document.getElementById("trajectory-scan-a");
+  const bearingASelect = document.getElementById("trajectory-bearing-a");
   const seedASelect = document.getElementById("trajectory-seed-a");
   const trackASelect = document.getElementById("trajectory-track-a");
   const coeffBSelect = document.getElementById("trajectory-coeff-b");
   const scanBSelect = document.getElementById("trajectory-scan-b");
+  const bearingBSelect = document.getElementById("trajectory-bearing-b");
   const seedBSelect = document.getElementById("trajectory-seed-b");
   const trackBSelect = document.getElementById("trajectory-track-b");
   const {
     availableCoefficients,
     availableScanRatesA,
+    availableBearingFactorsA,
     availableSeedsA,
     availableObjectsA,
     availableScanRatesB,
+    availableBearingFactorsB,
     availableSeedsB,
     availableObjectsB,
   } = pickTrajectoryEntries();
-  setTrajectorySelectOptions(coeffASelect, availableCoefficients, "a", "coefficient");
-  setTrajectorySelectOptions(scanASelect, availableScanRatesA, "a", "scan rate");
-  setTrajectorySelectOptions(seedASelect, availableSeedsA, "a", "seed");
-  setTrajectorySelectOptions(trackASelect, availableObjectsA, "a", "object");
-  setTrajectorySelectOptions(coeffBSelect, availableCoefficients, "b", "coefficient");
-  setTrajectorySelectOptions(scanBSelect, availableScanRatesB, "b", "scan rate");
-  setTrajectorySelectOptions(seedBSelect, availableSeedsB, "b", "seed");
-  setTrajectorySelectOptions(trackBSelect, availableObjectsB, "b", "object");
+  setTrajectorySelectOptions(coeffASelect, availableCoefficients, "a", "coefficient", state.trajectory.coefficientA);
+  setTrajectorySelectOptions(scanASelect, availableScanRatesA, "a", "scan rate", state.trajectory.scanRateA, (value) => `${formatNumber(value, 1)} deg/s`);
+  setTrajectorySelectOptions(bearingASelect, availableBearingFactorsA, "a", "radar precision", state.trajectory.bearingA, formatBearingFactor);
+  setTrajectorySelectOptions(seedASelect, availableSeedsA, "a", "seed", state.trajectory.seedA);
+  setTrajectorySelectOptions(trackASelect, availableObjectsA, "a", "object", state.trajectory.objectA);
+  setTrajectorySelectOptions(coeffBSelect, availableCoefficients, "b", "coefficient", state.trajectory.coefficientB);
+  setTrajectorySelectOptions(scanBSelect, availableScanRatesB, "b", "scan rate", state.trajectory.scanRateB, (value) => `${formatNumber(value, 1)} deg/s`);
+  setTrajectorySelectOptions(bearingBSelect, availableBearingFactorsB, "b", "radar precision", state.trajectory.bearingB, formatBearingFactor);
+  setTrajectorySelectOptions(seedBSelect, availableSeedsB, "b", "seed", state.trajectory.seedB);
+  setTrajectorySelectOptions(trackBSelect, availableObjectsB, "b", "object", state.trajectory.objectB);
 }
 
 function fillTrackCard(rootId, titleId, entry, style, isEmptyText) {
@@ -740,6 +995,7 @@ function fillTrackCard(rootId, titleId, entry, style, isEmptyText) {
     <div><dt>Non-linearity</dt><dd>${formatNumber(entry.coefficient, 2)}</dd></div>
     <div><dt>Accel level</dt><dd>${formatNumber(entry.second_order_coefficient, 2)}</dd></div>
     <div><dt>Scan rate (deg/s)</dt><dd>${formatNumber(entry.scan_rate_deg_s, 1)} deg/s</dd></div>
+    <div><dt>Radar precision</dt><dd>${formatBearingFactor(entry.bearing_noise_factor ?? 1)}</dd></div>
     <div><dt>Seed</dt><dd>${entry.seed}</dd></div>
     <div><dt>Detections</dt><dd>${entry.detection_count}</dd></div>
     <div><dt>Mean range (m)</dt><dd>${formatNumber(meanRange, 1)} m</dd></div>
@@ -791,7 +1047,7 @@ function fillTrackDetectionTable(rootId, entry) {
 
 function buildTrajectoryTransform(entries, width, height) {
   const allPoints = entries.flatMap((entry) => [
-    ...entry.truth_path.map((point) => ({ x: point.x, y: point.y })),
+    ...truthSegmentsInRadarRange(entry).flatMap((segment) => segment.map((point) => ({ x: point.x, y: point.y }))),
     ...entry.measured_points.map((point) => ({ x: point.x, y: point.y })),
     ...entry.estimated_path.map((point) => ({ x: point.x, y: point.y })),
   ]);
@@ -933,13 +1189,17 @@ function drawTrajectoryPanel() {
   ctx.textAlign = "left";
 
   if (trackA) {
-    drawPolyline(ctx, trackA.truth_path, toCanvas, TRAJECTORY_STYLES.a.truthStroke, 2.0);
+    for (const segment of truthSegmentsInRadarRange(trackA)) {
+      drawPolyline(ctx, segment, toCanvas, TRAJECTORY_STYLES.a.truthStroke, 2.0);
+    }
     drawPolyline(ctx, trackA.estimated_path, toCanvas, TRAJECTORY_STYLES.a.estimateStroke, 1.9, [7, 5]);
     drawMeasurementResiduals(ctx, trackA.measured_points, trackA.detection_meta, toCanvas, TRAJECTORY_STYLES.a);
     drawMeasurementPoints(ctx, trackA.measured_points, toCanvas, TRAJECTORY_STYLES.a, true);
   }
   if (trackB) {
-    drawPolyline(ctx, trackB.truth_path, toCanvas, TRAJECTORY_STYLES.b.truthStroke, 2.0);
+    for (const segment of truthSegmentsInRadarRange(trackB)) {
+      drawPolyline(ctx, segment, toCanvas, TRAJECTORY_STYLES.b.truthStroke, 2.0);
+    }
     drawPolyline(ctx, trackB.estimated_path, toCanvas, TRAJECTORY_STYLES.b.estimateStroke, 1.9, [7, 5]);
     drawMeasurementResiduals(ctx, trackB.measured_points, trackB.detection_meta, toCanvas, TRAJECTORY_STYLES.b);
     drawMeasurementPoints(ctx, trackB.measured_points, toCanvas, TRAJECTORY_STYLES.b, true);
@@ -1024,22 +1284,32 @@ function bindRunTableControls() {
 function bindTrajectoryFilters() {
   const coeffASelect = document.getElementById("trajectory-coeff-a");
   const scanASelect = document.getElementById("trajectory-scan-a");
+  const bearingASelect = document.getElementById("trajectory-bearing-a");
   const seedASelect = document.getElementById("trajectory-seed-a");
   const trackASelect = document.getElementById("trajectory-track-a");
   const coeffBSelect = document.getElementById("trajectory-coeff-b");
   const scanBSelect = document.getElementById("trajectory-scan-b");
+  const bearingBSelect = document.getElementById("trajectory-bearing-b");
   const seedBSelect = document.getElementById("trajectory-seed-b");
   const trackBSelect = document.getElementById("trajectory-track-b");
 
   coeffASelect.addEventListener("change", () => {
     state.trajectory.coefficientA = coeffASelect.value;
     state.trajectory.scanRateA = "auto";
+    state.trajectory.bearingA = "auto";
     state.trajectory.seedA = "auto";
     state.trajectory.objectA = "auto";
     renderAll();
   });
   scanASelect.addEventListener("change", () => {
     state.trajectory.scanRateA = scanASelect.value;
+    state.trajectory.bearingA = "auto";
+    state.trajectory.seedA = "auto";
+    state.trajectory.objectA = "auto";
+    renderAll();
+  });
+  bearingASelect.addEventListener("change", () => {
+    state.trajectory.bearingA = bearingASelect.value;
     state.trajectory.seedA = "auto";
     state.trajectory.objectA = "auto";
     renderAll();
@@ -1052,12 +1322,20 @@ function bindTrajectoryFilters() {
   coeffBSelect.addEventListener("change", () => {
     state.trajectory.coefficientB = coeffBSelect.value;
     state.trajectory.scanRateB = "auto";
+    state.trajectory.bearingB = "auto";
     state.trajectory.seedB = "auto";
     state.trajectory.objectB = coeffBSelect.value === "none" ? "none" : "auto";
     renderAll();
   });
   scanBSelect.addEventListener("change", () => {
     state.trajectory.scanRateB = scanBSelect.value;
+    state.trajectory.bearingB = "auto";
+    state.trajectory.seedB = "auto";
+    state.trajectory.objectB = "auto";
+    renderAll();
+  });
+  bearingBSelect.addEventListener("change", () => {
+    state.trajectory.bearingB = bearingBSelect.value;
     state.trajectory.seedB = "auto";
     state.trajectory.objectB = "auto";
     renderAll();
@@ -1096,6 +1374,7 @@ async function bootstrap() {
   state.trendCoefficient = await loadJson(`${DATA_ROOT}/trend_coefficient.json`);
   state.objectTrajectories = await loadJson(`${DATA_ROOT}/object_trajectories.json`);
   state.detectionRows = flattenDetectionRows(state.objectTrajectories);
+  initializeTrajectoryDefaults();
   bindGlobalFilters();
   renderRunTableControls();
   bindRunTableControls();
